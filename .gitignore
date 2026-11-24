@@ -21,6 +21,7 @@ auth.json
 .credentials.json
 .netrc
 .git-credentials
+hosts.yml
 # 環境変数のファイル（見本は残す）
 .env
 .env.*
