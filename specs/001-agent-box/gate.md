@@ -61,6 +61,29 @@
 | C2 | cc-safety-net は `strict`。読ませない場所に `~/.config/agent-box` と `~/.config/gh` を足す |
 | C4 | gitleaks は囲いの中用の hk の設定で流す。規則に Claude のログイン・Google の OAuth・OpenCode・Woodpecker・Codex の形を足す |
 
+## 決めたこと（Sonnet 5.5 のレビューで足したもの、V1〜V11）
+
+| # | 決めたこと |
+|---|---|
+| V1 | `[ -e /mnt/wsl/resolv.conf ]` のときだけ、それを同じパスに読むだけで mount する |
+| V2 | `.git/hooks` は読むだけで重ねる。`.git/config` は書けるままにし、終わったときに `branch.*` 以外のキーの変更を、起動したときの写しへキーごとに戻す（残してよいものだけを残す） |
+| V3 | `core.hooksPath` を agent-box の読むだけのフックのフォルダーに向け、hk を流す。リポジトリ自身の `.git/hooks` のフックは囲いの中では動かない |
+| V4 | secret-scan が見る認証のファイルと変数の名前の一覧を、起動スクリプトが作って読むだけで mount する（値は入れない） |
+| V5 | `profiles/*.conf` には環境変数の名前だけを書き、値は起動したときの環境から引き継ぐ |
+| V6 | secret-scan の値は引数・環境変数・一時ファイルに出さず、パイプからファイル記述子で渡す。gitleaks には `--config`・`--redact`・`--ignore-gitleaks-allow`・`-i` を必ず付ける |
+| V7 | 書けるのは親のフォルダーごと。`~/.claude.json` は `CLAUDE_CONFIG_DIR` で移せるかを確かめ、だめなら写して戻す |
+| V8 | `--unshare-pid` と新しい `/proc`、`--die-with-parent` を付ける。`--new-session` は付けない |
+| V9 | `MISE_STATE_DIR`・`MISE_CACHE_DIR` を囲い専用の場所に、`MISE_TRUSTED_CONFIG_PATHS` にプロジェクトを入れる |
+| V10 | Claude は `/etc/claude-code/managed-settings.json` でフックを固定する。ほかのエージェントは移すときに確かめる |
+| V11 | `.envrc`・`.npmrc`・`.pypirc` も塞ぐ。`.env` がシンボリックリンクならリンクの先にも重ねる |
+
+## G6 レビューのときに確かめたこと（2026-11-24）
+
+- `/etc/resolv.conf` は `/mnt/wsl/resolv.conf` へのシンボリックリンクで、リンクの先のファイルはある
+- `/proc/sys/dev/tty/legacy_tiocsti` は `0`（TIOCSTI はカーネルで止まっている）
+- gitleaks 8.30.1 のソース（`cmd/root.go`）: `--redact`・`--ignore-gitleaks-allow`・`-i`（`.gitleaksignore` の場所、既定は `.`）・`--baseline-path` がある。設定は `--config` → `GITLEAKS_CONFIG` → `GITLEAKS_CONFIG_TOML` → 調べる場所の `.gitleaks.toml` → 既定の順に使う。`--config` を渡さないと、エージェントが置いた `.gitleaks.toml` で規則を弱められる
+- dotfiles の hk の設定（`~/.config/hk/config.pkl`）の頭の説明: hk の版が mise の hk と同じなら、hk に入っている Pkl の包みで解くので取りに行かない
+
 ## G5 認証情報を止める仕組みで分かったこと（2026-11-24、公式の文書と道具のソースから）
 
 - GitHub の push protection: Claude のログインのトークン（`sk-ant-oat01-`）は既定の検出に無い。Google と Gemini の API キーは、見つけても push のときに断らない。App の installation token での push に効くかは、文書に書かれていない。Issue・PR・コメントの本文は、上がったあとに知らせるだけ。個人の public なリポジトリでは、自分で規則を足せない

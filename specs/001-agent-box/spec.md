@@ -39,7 +39,8 @@
 ### 仕組み
 
 - POSIX sh のスクリプト `bin/agent-box` が bwrap の引数を組み立てて起動する。引数は文字列をつなげず、位置パラメータ（`set -- "$@" …`）で組み立てる
-- `exec` で bwrap に置き換えない。bwrap が終わったら `trap` でセッション用のソケットを消す
+- bwrap には `--unshare-pid` と新しい `/proc`、`--die-with-parent` を必ず付ける。`--new-session` は付けない（この PC では `dev.tty.legacy_tiocsti` が 0 で、TIOCSTI はカーネルで止まっている。付けると端末の Ctrl-C がエージェントに届かなくなる見込みがある）
+- `exec` で bwrap に置き換えない。bwrap が終わったら `trap`（`EXIT`・`INT`・`TERM`・`HUP`）でセッション用のソケットを消す
 - 囲いの中でもう一度ラッパーが呼ばれたら（環境変数 `AGENT_BOX=1`）、包まずに本物を exec する（bwrap は入れ子にできない）
 
 ### プロジェクトの決め方
@@ -50,12 +51,22 @@
 - プロジェクトは、ホストと同じ絶対パスに、書けるように mount する（T3 の作業フォルダー、会話の記録、git の worktree が絶対パスで場所を指すため）
 - worktree（`.git` がファイルのもの）のときは、`git rev-parse --git-common-dir` が指す元のリポジトリの `.git` も、同じ絶対パスに書けるように mount する。元のリポジトリの作業フォルダー（`.git` の外）は見せない
 
+### `.git` の中で、囲いの外で動くものを仕込ませない
+
+`.git/hooks` と `.git/config` は追跡されず差分にも出ないのに、あなたが囲いの外で git を使ったときに、そこに書かれたものが囲いの外で動く。
+
+- `.git/hooks`（worktree なら元のリポジトリの `.git/hooks` も）は、書ける `.git` の上から読むだけで重ねる。無ければ空のフォルダーを作ってから重ねる
+- `.git/config` は書けるままにする（読むだけにすると `git switch -c` などが落ちる）。起動したときに写しを取り、囲いが終わったときに、`branch.*` 以外のキーの変更・追加・削除を、キーごとに写しの値へ戻して警告する（危ないキーを並べるのではなく、残してよい `branch.*` だけを残す）
+  - 受け入れる: エージェントが `git remote add` などで足した設定は、終わったときに消える。囲いが動いている間に、あなたが囲いの外で `.git/config` の `branch.*` 以外を変えると、その変更も戻る
+- 追跡されるファイル（リポジトリの `hk.pkl`、justfile、スクリプトなど）の変更は、ふつうのコードの変更と同じく差分で見えるので受け入れる
+
 ### ホームとファイル
 
 - ホームは毎回、空の tmpfs から組み立てる。そこに mount するのは、エージェントの状態の置き場（書ける）、設定（読むだけ）、道具（読むだけ）、囲い専用のキャッシュ（書ける）
 - mount の順は、書けるフォルダーが先、その中の読むだけのファイルが後
 - 読むだけで mount するものがホストに無いときは、起動の前にホストの側に作る（bwrap は、元のパスが無いと起動に失敗するため）。中身は、拡張子が `.json` のファイルなら `{}`、それ以外のファイルは空、フォルダーは空のフォルダー（`CLAUDE.md` などに `{}` が指示として読み込まれないように）
 - システムは `/usr`・`/etc` などを読むだけで mount する。`/init`・`/run/WSL`・`/mnt` は mount しない
+- DNS: WSL では `/etc/resolv.conf` が `/mnt/wsl/resolv.conf` へのリンクなので、`[ -e /mnt/wsl/resolv.conf ]` のときだけ、そのファイルを同じパスに読むだけで mount する（素の Linux では何もしない）。CA の証明書は `/etc` の mount で届く
 - `/tmp` は起動ごとの tmpfs にし、`TMPDIR=/tmp` を渡す。囲いが終われば消える
 
 ### 環境変数
@@ -67,11 +78,12 @@
 
 ### `.env`
 
-- 起動のたびに、プロジェクトの中の `.env` と `.env.*` を探し、見つかったものに中身の無いファイルを重ねて読めなくする
+- 起動のたびに、プロジェクトの中の `.env`・`.env.*`・`.envrc`・`.npmrc`・`.pypirc` を探し、見つかったものに中身の無いファイルを重ねて読めなくする。シンボリックリンクなら、リンクの先にも重ねる
 - 除く: `*.example`・`*.sample`・`*.template`
 - 探さない: `.git`・`target`・`node_modules`・`.venv`
 - git に追跡されているものには重ねず、警告を出す（中身は `.git` の履歴から読めるので、重ねても守りにならず、checkout や stash が落ちるだけ）
 - 起動したあとに作られた `.env` は、次に起動するまで塞がれない
+- 塞いだファイルは、`git clean`・`rm`・名前の付け替えで `EBUSY` になる
 
 ### WSL の interop
 
@@ -81,13 +93,15 @@
 ### ネットワーク
 
 - ホストのネットワークをそのまま使う。T3 のツール（MCP）は `http://127.0.0.1:<port>/mcp` に届く必要があるため
-- LAN と、同じ PC のほかのサービスは塞がない。困ったら、ネットワークを分けて T3 にだけ中継する形に移す
+- ssh-agent は使わない（`SSH_AUTH_SOCK` を渡さない。GitHub は https で使う）
+- LAN と、同じ PC のほかのサービス、抽象 Unix ソケット（WSLg の X11 など）は塞がない。困ったら、ネットワークを分けて T3 にだけ中継する形に移す
 
 ### 道具とキャッシュ
 
 - 道具は読むだけで mount する: mise、rustup、cargo の本体、Go、`~/.local/share/claude/versions`、`~/.local/bin/agy`、`~/.pi/agent/bin`、Pi の本体の置き場
 - フックが呼ぶ道具も読むだけで mount する: `~/.config/agent-checks`（check-file）、cc-safety-net の本体と `~/.cc-safety-net`、deja のフック（`~/.config/deja`）。hk の設定は、囲いの中用のもの（「認証情報を GitHub に上げないための確かめ」）を `~/.config/hk` に mount する
-- 取得のキャッシュは、囲い専用の書ける場所に分ける: cargo の registry、npm、uv、pnpm、mise の取得物。分けるので、囲いの中で毒されたキャッシュを、ホストのビルドが使うことはない
+- 取得のキャッシュは、囲い専用の書ける場所に分ける: cargo の registry、npm、uv、pnpm、mise の取得物、Pkl の取得物（hk の版が mise の hk と同じなら取りに行かないが、念のため）。分けるので、囲いの中で毒されたキャッシュを、ホストのビルドが使うことはない
+- mise: `MISE_STATE_DIR` と `MISE_CACHE_DIR` を、囲い専用の書ける場所に向ける。`MISE_TRUSTED_CONFIG_PATHS` にプロジェクトを入れる。道具の置き場は読むだけなので、入っていない道具は囲いの外で入れる
 - ビルドの成果物（`target` など）はプロジェクトの中にあるので、そのまま共有する
 - 中では、エージェントの自動更新を切る（Claude は `DISABLE_AUTOUPDATER=1`。Antigravity は T3 が `AGY_CLI_DISABLE_AUTO_UPDATE=1` を渡す。Pi と Codex は受け入れで確かめる）。更新は囲いの外で、それぞれの公式の更新コマンドで流す
 
@@ -98,12 +112,15 @@
   - Pi: 拡張、`AGENTS.md`、`mcp.json`
   - Antigravity: `~/.gemini/GEMINI.md`、`hooks.json`
   - 共通のスキル: `~/.agents/skills`
-- **書けるようにするもの**（設定と状態が混ざっているもの、動いている最中に書かれるもの）:
-  - Claude: `~/.claude.json`、memory、plugins、同期されるスキル、会話の記録などの状態
-  - Pi: `settings.json`、`trust.json`、sessions などの状態
-  - Antigravity: `~/.gemini/antigravity-cli/settings.json` と、状態の置き場
-  - Codex: `config.toml`（信頼を書き込むため）と、状態の置き場
+- **書けるようにするもの**（設定と状態が混ざっているもの、動いている最中に書かれるもの）。1つのファイルだけを書けるように mount すると、一時ファイルに書いてから名前を付け替える保存が `EBUSY` で落ちるので、親のフォルダーごと書けるようにし、設定だけのファイルを上から読むだけで重ねる:
+  - Claude: `~/.claude`（memory、plugins、同期されるスキル、会話の記録などの状態）。`~/.claude.json` は親がホームそのものなので、`CLAUDE_CONFIG_DIR` で `~/.claude` の中に移せるかを T060 の最初に確かめる。移せなければ、起動のときに囲いの中へ写し、終わったときにロックを掛けて写し戻す
+  - Pi: `~/.pi/agent`（`settings.json`、`trust.json`、sessions などの状態）
+  - Antigravity: `~/.gemini/antigravity-cli`
+  - Codex: `~/.codex`（`config.toml` に信頼を書き込むため）
 - `settings.json` を読むだけにするので、`/config` でテーマなどを変えたときの保存は落ちる。これは受け入れる
+- プロジェクトの設定でフックを外させない:
+  - Claude: agent-box が `/etc/claude-code/managed-settings.json` を用意して囲いの中に mount し、cc-safety-net と check-file のフックを固定する（プロジェクトの `.claude/settings.local.json` などから外せないようにする）
+  - Pi・Antigravity・Codex: プロジェクトの設定で外せるかを、移すときに確かめる（Antigravity は、作業フォルダーの `.agents/hooks.json` に同じ名前を `enabled:false` で置けば外せる見込みがある）
 - エージェント組み込みの囲いは切る（入れ子にしない）:
   - Claude Code: `settings.json` の `sandbox`
   - Codex: `sandbox_mode = "danger-full-access"`、`approval_policy = "never"`
@@ -163,11 +180,11 @@
 `GIT_CONFIG_*` で次を渡す（ホームが tmpfs なので、`~/.gitconfig` には頼らない）:
 
 - `user.name` と `user.email`: bot の名前（`<app>[bot]`、`<Bot User ID>+<app>[bot]@users.noreply.github.com`。Bot User ID は `gh api '/users/<app>[bot]' --jq .id` の値）
-- `credential.helper`: `git-credential-agent-box`
+- `credential.helper`: `agent-box`（git は頭に `git credential-` を足して `git-credential-agent-box` を呼ぶ）
   - sh と `curl --unix-socket` で動く（Node を起動しない）
   - 標準入力の `protocol=https` と `host=github.com` を確かめ、それ以外にはトークンを渡さない
 - `url.https://github.com/.insteadOf`: `git@github.com:` と `ssh://git@github.com/` の形を `https://github.com/` に書き換える
-- hk のフック（「認証情報を GitHub に上げないための確かめ」）
+- `core.hooksPath`: agent-box の読むだけのフックのフォルダー（`hooks/`）。そこのスクリプトが `hk run <フック>` を流す。リポジトリが自分で `.git/hooks` に入れたフック（prek など）は、囲いの中では動かない。チェックは hk の設定に寄せる
 
 ### gh（1 段目）
 
@@ -200,14 +217,19 @@
 
 ### 囲いの中の hk と gitleaks（1 段目から）
 
-- agent-box が、囲いの中用の hk の設定（`hk/config.pkl`）を持つ。dotfiles の hk の設定を読み込んだうえで、gitleaks の段と `agent-box-secret-scan` の段を、pre-commit と pre-push に足す。囲いの中では、これを `~/.config/hk` に読むだけで mount する。囲いの外のあなたの hk は変えない
+- agent-box が、囲いの中用の hk の設定（`hk/config.pkl`）を持つ。dotfiles の hk の設定を読み込んだうえで、gitleaks の段と `agent-box-secret-scan` の段を、pre-commit と pre-push に足す。囲いの中では、これを `~/.config/hk` に読むだけで mount し、読み込む dotfiles の設定は本物のパスに読むだけで mount する。囲いの外のあなたの hk は変えない
+- gitleaks は、次を必ず付けて流す: `--config`（agent-box の `gitleaks.toml`。リポジトリの `.gitleaks.toml` を使わせない）、`--redact`、`--ignore-gitleaks-allow`（行の末尾の `gitleaks:allow` を効かせない）、`-i`（中身の無い読むだけの場所。リポジトリの `.gitleaksignore` を使わせない）。`--baseline-path` は使わない
 - gitleaks の規則は agent-box の `gitleaks.toml` に書く。既定の規則を使ったうえで、次を足す:
   - Claude のログインのトークン（`sk-ant-oat01-`。更新に使うトークンの形は、確かめてから足す）
   - Google の OAuth（`ya29.`・`1//`・`GOCSPX-`）
   - OpenCode の API キー（形は、確かめてから足す）
   - Woodpecker のトークンの形
   - Codex（ChatGPT）のログインのトークン（形は、確かめてから足す）
-- `agent-box-secret-scan`（sh）は、`profiles/*.conf` に書いた認証のファイルから値を取り出し、commit や push する差分に含まれていないかを `grep -F` で比べる。形の規則に頼らないので、新しい形でも、書き写されたものでも見つかる。値はファイルに書き出さず、見つかっても値は出さない（どのファイルの何行目かだけを出す）
+- `agent-box-secret-scan`（sh）は、認証のファイルと、API キーの環境変数の値を取り出し、commit や push する差分に含まれていないかを `grep -F` で比べる。形の規則に頼らないので、新しい形でも、書き写されたものでも見つかる
+  - どのファイルとどの変数を見るかは、起動スクリプトが `profiles/*.conf` からパスと変数の名前だけを抜き出した一覧にして、囲いの中に読むだけで mount する（値は入れない）
+  - 値の取り出しは node でする（JSON の文字列の値のうち一定の長さ以上のもの）。空の値は除く（grep は空のパターンを何にでも当たるものとみなすため）
+  - 値は、引数・環境変数・一時ファイルに出さない。パイプからファイル記述子で渡す: `node … | { exec 3<&0; git diff --cached | grep -n -F -f /dev/fd/3 | cut -d: -f1; }`（ファイルごとに分けて流す）
+  - 見つかっても値と行の中身は出さず、どのファイルの何行目かだけを出す
 - トークンの形は、エージェントを移すときに、本物のファイルに規則を当てて件数だけで確かめる。値も先頭の文字も画面に出さない
 
 ### cc-safety-net（1 段目から）
@@ -262,7 +284,7 @@
   - 一覧は、同じ key を繰り返して書く
   - 知らない key はエラーにして、起動を止める
   - 拡張子は `.conf`。TOML の仲間としてではなく、独自の形として扱う
-- エージェントごとの設定（`profiles/<エージェント>.conf`）: 書けるパス、読むだけのパス、本物のバイナリのフルパス、中で渡す環境変数、`agent-box-secret-scan` が値を取り出す認証のファイル
+- エージェントごとの設定（`profiles/<エージェント>.conf`）: 書けるパス、読むだけのパス、本物のバイナリのフルパス、中で渡す環境変数の名前（値は書かず、起動したときの環境から引き継ぐ）、`agent-box-secret-scan` が値を取り出す認証のファイルと環境変数の名前
 - 窓口の設定（`broker.conf`）: App ID、`.pem` のパス、Woodpecker のサーバー、Woodpecker のトークンのファイルのパス。秘密そのものは書かない。窓口（TS）も同じ形を読む。sh と TS の読み方がずれないことはテストで確かめる
 - 設定は chezmoi（dotfiles）が囲いの外に置き、囲いには mount しない
 - `agent-box check` で、知らない key、無いパス、読むだけと書けるの重なり、cc-safety-net の組み込みの有無を、起動の前に一覧で出す
@@ -322,4 +344,8 @@
 - deja のフックが、動いている最中に自分の置き場へ書くか
 - cc-safety-net の Antigravity 向けの組み込みが、T3 の `agy acp` で効くか。cc-safety-net が `unset` を見るか
 - Claude の更新に使うトークン、OpenCode、Codex のトークンの形
+- `CLAUDE_CONFIG_DIR` で `~/.claude.json` を `~/.claude` の中に移せるか
+- T3 が Claude に渡す起動の引数と環境変数（MCP の設定のファイル、添付の置き場 `~/.t3/userdata/attachments` など）。Claude を移すときに記録用の包みで確かめ、mount するものを決める
+- ログインの更新で書き戻されるトークンが、書ける置き場に残ること。同じリポジトリで同時に動くセッションが、書ける状態のファイルでぶつからないこと
+- ロケール（`/usr/lib/locale`）と terminfo（`/usr/share/terminfo`）が、`/usr` の mount で足りること
 - 2 段目: remote helper のやりとりをどこまで sh で書くか（`list for-push`、`push`、`--force-with-lease` などの受け渡し）、`git push -u` の追跡先の書き込み、gh がトークン無しで `http_unix_socket` を使えるか

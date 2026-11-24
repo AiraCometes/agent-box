@@ -6,8 +6,8 @@
 
 - [ ] T001 GitHub App を作る（spec.md の「GitHub App」の権限）。`.pem` を囲いの外に 600 で置き、App ID と Bot User ID を記録する
 - [ ] T002 使うリポジトリの main に ruleset を掛ける（PR・承認1つ・CI の通過を必須、force push と削除を禁止、Bypass list は本人だけ）。あわせて secret scanning と push protection を有効にし、捨ててよいリポジトリで、GitHub のトークン（`ghs_…` の形）と、Anthropic などエージェントの認証情報の形を含む push が断られるかを確かめて `gate.md` に記録する（本物の秘密は使わない。見本の形を使い、試したあとは消す）
+- [ ] T003 Woodpecker で、秘密を渡すイベントを main への push と tag に絞り、PR の pipeline に承認を要るようにする。CODEOWNERS で `.woodpecker/**` と `.woodpecker.y*ml` を守る
 - [ ] T004 Woodpecker のトークンを `~/.config/agent-box/woodpecker-token`（600）に置き、`.pem` を `~/.config/agent-box/github-app.pem`（600）に置く。どちらも chezmoi とリポジトリに入れない
-- [ ] T003 Woodpecker で、秘密を渡すイベントを push と tag に絞り、PR の pipeline に承認を要るようにする。CODEOWNERS で `.woodpecker/**` と `.woodpecker.y*ml` を守る
 
 ## リポジトリの土台
 
@@ -20,10 +20,10 @@
 
 ## 囲い（bin/agent-box）
 
-- [ ] T030 [テスト先] bats で、組み立てた bwrap の引数を確かめる: ホームが tmpfs、`/tmp` が tmpfs、書けるフォルダーが先で読むだけのファイルが後、読むだけの設定、無いものを作るときの中身（`.json` は `{}`、ほかのファイルは空、フォルダーは空のフォルダー）、`/init`・`/run/WSL`・`/mnt` を見せないこと、環境変数を全部消して決めたものだけを渡すこと（`WSL_INTEROP` と `WOODPECKER_TOKEN` が渡らない）、プロジェクトの決め方と起動を断る場所（git の外、ホームとその上、`/mnt` の下）、同じ絶対パスに mount すること、worktree の元の `.git` を mount すること、T3 から起動したときに足すもの、`AGENT_BOX=1` のときは包まずに本物を exec すること、外側のラッパーのフォルダーを `PATH` から外すこと、`GIT_CONFIG_*`（身元・credential.helper・insteadOf）
-- [ ] T031 [テスト先] bats で `.env` を確かめる: `.env` と `.env.*` に重ねる、見本を除く、`.git`・`target`・`node_modules`・`.venv` を探さない、追跡されているものには重ねずに警告する
+- [ ] T030 [テスト先] bats で、組み立てた bwrap の引数を確かめる: ホームが tmpfs、`/tmp` が tmpfs、書けるフォルダーが先で読むだけのファイルが後、読むだけの設定、無いものを作るときの中身（`.json` は `{}`、ほかのファイルは空、フォルダーは空のフォルダー）、`/init`・`/run/WSL`・`/mnt` を見せないこと、環境変数を全部消して決めたものだけを渡すこと（`WSL_INTEROP` と `WOODPECKER_TOKEN` が渡らない）、プロジェクトの決め方と起動を断る場所（git の外、ホームとその上、`/mnt` の下）、同じ絶対パスに mount すること、worktree の元の `.git` を mount すること、T3 から起動したときに足すもの、`AGENT_BOX=1` のときは包まずに本物を exec すること、外側のラッパーのフォルダーを `PATH` から外すこと、`GIT_CONFIG_*`（身元・`credential.helper = agent-box`・insteadOf・`core.hooksPath`。git から `git credential fill` を呼んで helper に届くこと）、`--unshare-pid` と新しい `/proc`・`--die-with-parent` を付け `--new-session` を付けないこと、`/mnt/wsl/resolv.conf` があるときだけ mount すること、`.git/hooks`（worktree なら元のものも）を読むだけで重ねること、終わったときに `.git/config` の `branch.*` 以外の変更を写しへ戻すこと、`MISE_STATE_DIR`・`MISE_CACHE_DIR`・`MISE_TRUSTED_CONFIG_PATHS`、Claude の `managed-settings.json` を mount すること、書けるのは親のフォルダーごとで単一のファイルを書けるように mount しないこと、`trap` が `EXIT`・`INT`・`TERM`・`HUP` で片付けること
+- [ ] T031 [テスト先] bats で `.env` を確かめる: `.env`・`.env.*`・`.envrc`・`.npmrc`・`.pypirc` に重ねる、シンボリックリンクならリンクの先にも重ねる、見本を除く、`.git`・`target`・`node_modules`・`.venv` を探さない、追跡されているものには重ねずに警告する
 - [ ] T032 T030・T031 を通す `bin/agent-box` を書く（位置パラメータで組み立てる、`exec` で置き換えない、`trap` で片付ける）
-- [ ] T033 本人の端末で、本物の bwrap を使って `~/.ssh` が見えないこと、`.env` が読めないこと、`cmd.exe` が動かないことを確かめ、`gate.md` に記録する
+- [ ] T033 本人の端末で、本物の bwrap を使って `~/.ssh` が見えないこと、`.env` が読めないこと、`cmd.exe` が動かないこと、DNS と HTTPS（CA の証明書）が通ること、`/proc` から囲いの外のプロセスが見えないこと、`.git/hooks` に書けないこと、Ctrl-C がエージェントに届くことを確かめ、`gate.md` に記録する
 
 ## 窓口（broker/token-broker.ts）
 
@@ -31,7 +31,7 @@
 - [ ] T041 [テスト先] node:test で、偽の Woodpecker を相手に確かめる: 番号と step の ID を `/^\d+$/` で検証、lookup の repo_id のキャッシュ、ログをそのまま中継すること
 - [ ] T044 [テスト先] node:test で、`.pem` と Woodpecker のトークンのファイルの権限が 600 より広いと窓口が起動しないことを確かめる
 - [ ] T042 T040・T041・T044 を通す窓口を書く。systemd のユーザーの `.socket` と `.service` のテンプレートを置く
-- [ ] T043 窓口が `--max-old-space-size=32 --jitless` で動くことを、大きなログを流して確かめる
+- [ ] T043 窓口が `--max-old-space-size=32 --jitless` で動くことを確かめる。合否: 100MB のログを中継し終えるまで、窓口のプロセスの RSS が 64MB を超えず、落ちないこと
 
 ## 囲いの中の道具（inner-bin）
 
@@ -40,7 +40,7 @@
 
 ## 認証情報を GitHub に上げないための確かめ（1 段目）
 
-- [ ] T052 [テスト先] bats で、`gitleaks.toml`（既定の規則と、Claude のログイン・Google の OAuth・OpenCode・Woodpecker・Codex の形）と `agent-box-secret-scan`（認証のファイルの値と `grep -F` で比べる）が、見本の値を見つけ、値を出さずにファイルと行だけを出すことを確かめる。見本の値は、本物の形に似せた偽物にする
+- [ ] T052 [テスト先] bats で、`gitleaks.toml`（既定の規則と、Claude のログイン・Google の OAuth・OpenCode・Woodpecker・Codex の形）と `agent-box-secret-scan`（認証のファイルの値と `grep -F` で比べる）が、見本の値を見つけ、値を出さずにファイルと行だけを出すことを確かめる。あわせて、gitleaks に `--config`・`--redact`・`--ignore-gitleaks-allow`・`-i` を付けていて、リポジトリの `.gitleaks.toml`・`.gitleaksignore`・`gitleaks:allow` が効かないこと、secret-scan の値が引数・環境変数・一時ファイルに出ないこと（`/proc/<pid>/cmdline` と `/proc/<pid>/environ` と `/tmp` を見る）、空の値で何にでも当たらないこと、API キーの環境変数の値も見つけることを確かめる。見本の値は、本物の形に似せた偽物にし、`tests/fixtures/` に置く
 - [ ] T053 T052 を通す `gitleaks.toml`・`inner-bin/agent-box-secret-scan`・囲いの中用の `hk/config.pkl`（dotfiles の設定を読み込み、pre-commit と pre-push に gitleaks と secret-scan を足す）を書く
 - [ ] T054 cc-safety-net の `policy.json`（`strict`、読ませない場所に `~/.config/agent-box` と `~/.config/gh`）と rulebook（`--no-verify`・`-n`・`git -c`・`--config-env`・`unset GIT_CONFIG_COUNT`・`env -u GIT_CONFIG_COUNT`・`gh pr merge`・`gh repo delete`・`gh repo edit --visibility`）を、止める見本と通る見本つきで書き、CI で `rule verify` を流す
 - [ ] T055 `agent-box check` に、cc-safety-net が各エージェントに組み込まれているかの確かめを足す

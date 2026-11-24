@@ -1,34 +1,41 @@
-# 秘密（spec.md の「秘密の置き場」）。どれもリポジトリに入れない。
+# 秘密（spec.md の「秘密の置き場」）。認証情報はリポジトリに置かない前提で、これはそれが破れたときの受け止め。
 # 鍵と証明書
 *.pem
 *.key
+*.p8
 *.p12
 *.pfx
+*.ppk
 *.jks
 *.keystore
+*.kdbx
 id_rsa*
+id_dsa*
 id_ecdsa*
 id_ed25519*
 # トークンと認証情報
 *token*
-!*token*.ts
-!*token*.test.ts
 *.token
 *credential*
-!/inner-bin/git-credential-agent-box
-!/tests/*credential*
 auth.json
 .credentials.json
+hosts.yml
 .netrc
 .git-credentials
-hosts.yml
+.npmrc
+.pypirc
+.pgpass
+.docker/config.json
+*.tfstate
+*.tfstate.*
 # 環境変数のファイル（見本は残す）
 .env
 .env.*
+.envrc
 !.env.example
 !.env.sample
 !.env.template
-# 本物の窓口の設定（見本は *.conf.example として置く）
+# 本物の窓口とエージェントの設定（見本は *.conf.example として置く）
 /broker.conf
 /profiles/*.conf
 !/profiles/*.conf.example
@@ -56,3 +63,14 @@ hosts.yml
 /.ripgreprc
 /.zprofile
 /.zshrc
+
+# 上の形に当たっても、リポジトリのコードとテストの見本は残す（見本は偽物の値だけにする）
+!/bin/**
+!/inner-bin/**
+!/broker/**
+!/hooks/**
+!/hk/**
+!/cc-safety-net/**
+!/tests/**
+!/systemd/**
+!/specs/**
