@@ -109,6 +109,15 @@
 | Y4 | `mise where` は agent-box の `mise.toml` のあるフォルダーで流す。版が入っていなければ起動を断る |
 | Y5 | 値の無いキーは `true` として戻す |
 
+## G9 最後のレビューで、レビューの側が確かめたこと（2026-11-24、gitleaks 8.30.1・git 2.56.1）
+
+- 結論は「実装に進める」。守るものが破れる問題、動かなくなる問題、新しい決めごとなしに実装できない箇所は無かった
+- `gitleaks stdin` を空のフォルダーで流すと、`--config`・`--redact`・`--ignore-gitleaks-allow` が効いた。`gitleaks:allow` は `--ignore-gitleaks-allow` が無いと素通りした（このフラグは必須）。作業フォルダーの `.gitleaks.toml` は `--config` があれば使われなかった。設定のファイルが無いときも終了コードは 1、空の入力は 0
+- `git ls-remote --branches --tags` と `--heads --tags` は同じ出力だった（`--branches` に決めた）。`refs/pull/*` は出なかった。注釈付きのタグは、タグのオブジェクトの行と `^{}` の行の2つが出た
+- `git cat-file -e "<sha>^{commit}"` は、注釈付きのタグのオブジェクトの SHA でも 0、無い SHA では 128 だった
+- 差分を作る git のフラグで、`.git/config` の `diff.external`・`noprefix`・`mnemonicPrefix`・`srcPrefix`・`dstPrefix`・`color.diff=always`、`-diff` の属性（NUL を含むファイル）、`core.quotePath`（日本語のファイル名）を打ち消せた
+- 実装の中で直すもの（tasks.md の T032 と T052 に書き足した）: 戻すときに `branch.*` が二重にならないこと、`--not` の SHA を `rev-list --stdin` で渡すこと、`git log -p` の commit のヘッダーを読まないこと、空白を含むファイル名の末尾のタブ、gitleaks の終了コード 1 の2つの意味、注釈付きのタグの push
+
 ## G8 4回目のレビューで、レビューの側が確かめたこと（2026-11-24、gitleaks 8.30.1・git 2.56.1）
 
 - `--no-ext-diff --no-textconv --no-color --no-renames` と `-c diff.noprefix=false -c diff.mnemonicPrefix=false` で、`.git/config` の `diff.external`・textconv・`color.diff=always`・`noprefix`・`mnemonicPrefix` と `.gitattributes` の `diff=x` を打ち消せた

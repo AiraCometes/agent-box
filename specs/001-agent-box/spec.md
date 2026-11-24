@@ -254,7 +254,7 @@
     - pre-push（標準入力の行ごと）:
       - ローカルの SHA が `0000…`（削除の push）なら飛ばす
       - リモートの SHA が `0000…` でなく、ローカルにあるなら `git log -p -m -U0 <remote_sha>..<local_sha>`
-      - リモートの SHA が `0000…`（新しいブランチ）か、ローカルに無い（ほかの人が push した直後など）なら、push 先が今持っている SHA を聞いて、そのうちローカルにあるものを除く: `git -c protocol.ext.allow=never ls-remote --branches --tags <push 先の URL>`（`refs/pull/*` などの、マージされていない PR の参照を拾わないよう、ブランチとタグだけを聞く。git 2.56 で `--branches` が通らなければ `--heads --tags`。どちらが通るかは T052 で確かめる）で SHA を得て、`git cat-file -e "<sha>^{commit}"`（注釈付きのタグも扱う）でローカルにあるものだけを残し、`git log -p -m -U0 <local_sha> --not <その SHA…>` にする。1つも残らなければ `--not` を付けずに `<local_sha>` だけを渡す（履歴を全部調べるので遅くなりうるのは受け入れる）。`ls-remote` が落ちたら通さない
+      - リモートの SHA が `0000…`（新しいブランチ）か、ローカルに無い（ほかの人が push した直後など）なら、push 先が今持っている SHA を聞いて、そのうちローカルにあるものを除く: `git -c protocol.ext.allow=never ls-remote --branches --tags <push 先の URL>`（`refs/pull/*` などの、マージされていない PR の参照を拾わないよう、ブランチとタグだけを聞く。git 2.56.1 で `--branches` が通ることを確かめた。gate.md の G9）で SHA を得て、`git cat-file -e "<sha>^{commit}"`（注釈付きのタグも扱う）でローカルにあるものだけを残し、`git log -p -m -U0 <local_sha> --not <その SHA…>` にする。1つも残らなければ `--not` を付けずに `<local_sha>` だけを渡す（履歴を全部調べるので遅くなりうるのは受け入れる）。`ls-remote` が落ちたら通さない
       - 囲いの中の `refs/remotes/*` は使わない（エージェントが偽の参照を作れば、範囲を空にできるため）
       - `-m` で、マージコミットで入った内容も調べる
   - 差分の区切りの行（`@@ … +<行> …`）から、どのファイルの何行目かを出す。値と行の中身は出さない
