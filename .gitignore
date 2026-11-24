@@ -1,0 +1,57 @@
+# 秘密（spec.md の「秘密の置き場」）。どれもリポジトリに入れない。
+# 鍵と証明書
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ecdsa*
+id_ed25519*
+# トークンと認証情報
+*token*
+!*token*.ts
+!*token*.test.ts
+*.token
+*credential*
+!/inner-bin/git-credential-agent-box
+!/tests/*credential*
+auth.json
+.credentials.json
+.netrc
+.git-credentials
+# 環境変数のファイル（見本は残す）
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+# 本物の窓口の設定（見本は *.conf.example として置く）
+/broker.conf
+/profiles/*.conf
+!/profiles/*.conf.example
+
+# 動かしたときにできるもの
+*.sock
+*.log
+/tmp/
+
+# エディターと OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# 囲い（Claude Code・srt）がリポジトリの直下に作る印
+/.claude/
+/.bash_profile
+/.bashrc
+/.gitconfig
+/.gitmodules
+/.mcp.json
+/.profile
+/.ripgreprc
+/.zprofile
+/.zshrc

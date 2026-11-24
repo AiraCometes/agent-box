@@ -5,7 +5,8 @@
 ## GitHub の側
 
 - [ ] T001 GitHub App を作る（spec.md の「GitHub App」の権限）。`.pem` を囲いの外に 600 で置き、App ID と Bot User ID を記録する
-- [ ] T002 使うリポジトリの main に ruleset を掛ける（PR・承認1つ・CI の通過を必須、force push と削除を禁止、Bypass list は本人だけ）
+- [ ] T002 使うリポジトリの main に ruleset を掛ける（PR・承認1つ・CI の通過を必須、force push と削除を禁止、Bypass list は本人だけ）。あわせて secret scanning と push protection を有効にし、捨ててよいリポジトリで、GitHub のトークン（`ghs_…` の形）と、Anthropic などエージェントの認証情報の形を含む push が断られるかを確かめて `gate.md` に記録する（本物の秘密は使わない。見本の形を使い、試したあとは消す）
+- [ ] T004 Woodpecker のトークンを `~/.config/agent-box/woodpecker-token`（600）に置き、`.pem` を `~/.config/agent-box/github-app.pem`（600）に置く。どちらも chezmoi とリポジトリに入れない
 - [ ] T003 Woodpecker で、秘密を渡すイベントを push と tag に絞り、PR の pipeline に承認を要るようにする。CODEOWNERS で `.woodpecker/**` と `.woodpecker.y*ml` を守る
 
 ## リポジトリの土台
@@ -28,7 +29,8 @@
 
 - [ ] T040 [テスト先] node:test で、偽の GitHub を相手に確かめる: JWT（RS256）、installation token の `repositories` と `permissions` を絞ること、残り5分までのキャッシュと再発行、セッション用のソケットがほかのリポジトリを頼めないこと、操作用のつながりが切れたらセッションを消すこと
 - [ ] T041 [テスト先] node:test で、偽の Woodpecker を相手に確かめる: 番号と step の ID を `/^\d+$/` で検証、lookup の repo_id のキャッシュ、ログをそのまま中継すること
-- [ ] T042 T040・T041 を通す窓口を書く。systemd のユーザーの `.socket` と `.service` のテンプレートを置く
+- [ ] T044 [テスト先] node:test で、`.pem` と Woodpecker のトークンのファイルの権限が 600 より広いと窓口が起動しないことを確かめる
+- [ ] T042 T040・T041・T044 を通す窓口を書く。systemd のユーザーの `.socket` と `.service` のテンプレートを置く
 - [ ] T043 窓口が `--max-old-space-size=32 --jitless` で動くことを、大きなログを流して確かめる
 
 ## 囲いの中の道具（inner-bin）

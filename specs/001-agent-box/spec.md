@@ -151,7 +151,25 @@
 - ログはメモリに溜めず、そのまま中継する（`upstreamRes.pipe(clientRes)`）
 - 囲いの中には、全部のエージェントで共通の取得コマンド `inner-bin/agent-box-ci` を置く。CLAUDE.md・AGENTS.md・GEMINI.md は、`woodpecker-cli` の代わりにこれを使うように書き換える
 
+### 秘密の置き場
+
+秘密は、どのリポジトリにも入れない（agent-box にも dotfiles にも）。chezmoi の管理にも入れない。設定のファイルには、秘密のファイルのパスだけを書く。
+
+| 秘密 | 置き場 | 囲いの中 |
+|---|---|---|
+| SSH の鍵 | `~/.ssh` | mount しない |
+| GitHub App の `.pem` | `~/.config/agent-box/github-app.pem`（権限 600） | mount しない |
+| Woodpecker のトークン | `~/.config/agent-box/woodpecker-token`（権限 600） | mount しない。窓口だけが読む |
+| installation token | 窓口のメモリ | セッションのソケットから、使うたびにもらう（1時間で切れ、1つのリポジトリに絞る） |
+| エージェント自身の認証 | ホームの今の場所（`~/.claude/.credentials.json`、Pi や Codex の `auth.json` など） | 状態として書けるように mount する（受け入れた危険） |
+
+- 窓口は、起動したときに `.pem` と Woodpecker のトークンのファイルの権限を確かめる。600 より広ければ起動しない
+- agent-box と dotfiles の `.gitignore` に、鍵・トークン・`.env` などの形を入れる（うっかり入れないため）。ただし、`.gitignore` は `git add -f` やエージェントがファイルに書き写すことを止められない
+- **受け入れている危険**: 囲いの中のエージェントは、自分の認証と installation token を読める。これをファイルに書いてコミットし push すれば、リポジトリに入る。囲いでは止められないので、GitHub の push protection（secret scanning が push を断る仕組み）で止める。どの形の秘密まで見つけられるかは、T002 で確かめる
+
 ## GitHub と CI の側
+
+- **push protection**: 使うリポジトリで、secret scanning と push protection を有効にする
 
 - **main の ruleset**:
   - 掛ける: PR を必須、承認を1つ必須、CI の通過を必須、force push と削除を禁止
@@ -170,7 +188,7 @@
   - 知らない key はエラーにして、起動を止める
   - 拡張子は `.conf`。TOML の仲間としてではなく、独自の形として扱う
 - エージェントごとの設定（`profiles/<エージェント>.conf`）: 書けるパス、読むだけのパス、本物のバイナリのフルパス、中で渡す環境変数
-- 窓口の設定（`broker.conf`）: App ID、`.pem` のパス、Woodpecker のサーバー。窓口（TS）も同じ形を読む。sh と TS の読み方がずれないことはテストで確かめる
+- 窓口の設定（`broker.conf`）: App ID、`.pem` のパス、Woodpecker のサーバー、Woodpecker のトークンのファイルのパス。秘密そのものは書かない（下の「秘密の置き場」）。窓口（TS）も同じ形を読む。sh と TS の読み方がずれないことはテストで確かめる
 - 設定は chezmoi（dotfiles）が囲いの外に置き、囲いには mount しない
 - `agent-box check` で、知らない key、無いパス、読むだけと書けるの重なりを、起動の前に一覧で出す
 - パスごとの選択肢や入れ子が要るようになったら、JSON に移す
