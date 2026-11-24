@@ -60,12 +60,12 @@
   - 残してよいもの:
     - `branch.*`。ただし、`branch.<x>.remote` と `branch.<x>.pushRemote` は、最後に残るリモートの名前（写しにあったものか、下で残す新しいもの）を指すときだけ残す（それ以外の値、`ext::…` のような URL も含めて戻す）
     - 起動したときに無かったリモートの `remote.<名前>.url` と `remote.<名前>.fetch`。url は `https://`・`git@github.com:`・`ssh://git@github.com/` で始まるものだけ（`ext::` などでのコマンドの実行を防ぐ）。すでにあったリモートを変えたものと、ほかのキー（`pushurl`・`uploadpack`・`receivepack`・`proxy` など）は戻す
-  - 写しは `.git` の外の `~/.local/state/agent-box/<hash>/` に置く。`<hash>` は `git rev-parse --git-common-dir` の実パスから作る（同じリポジトリの worktree どうしが、1つの写しと1つの数を共有する）。写しには `.git/config` の複製と、起動したときの `refs/remotes/*` の値（下の pre-push で使う）を入れる
+  - 写しは `.git` の外の `~/.local/state/agent-box/<hash>/` に置く。`<hash>` は `git rev-parse --git-common-dir` の実パスから作る（同じリポジトリの worktree どうしが、1つの写しと1つの数を共有する）。写しには `.git/config` の複製だけを入れる
   - 同じリポジトリで同時に動くセッションは、`flock` の中で数える。記録のファイルの数ではなく、記録した PID とプロセスの起動時刻（`/proc/<pid>/stat` の starttime）が両方合うものを生きているとみなす（`kill -0` だけでは、使い回された PID を生きていると取り違えるため）。死んだセッションの記録は消す
     1. 起動するとき、生きているセッションが 0 なら、残っている写しで戻し（前回 `kill -9` などで戻せなかった分）、そのあとで新しい写しを取る
     2. 1 つ以上なら、写しも戻しもせず、すでにある写しを使い続ける
     3. 終わるとき、最後に生きているセッションだけが戻す
-  - 戻すのは、囲いの外の起動スクリプトが呼ぶ node のスクリプト。写しの複製から作り始め、今の `.git/config` を `git config --file … --list -z`（各項目が「キー、改行、値、NUL」の形）で読み、残してよいものだけを `git config --file <新しいファイル> --add <キー> <値>` で順に足す（値に `=` や改行があっても崩れない。同じキーの値がいくつもあるものも、その順で足す）。できたファイルを `.git/config` の隣に書き、名前の付け替えで入れ替える（`.git/config` は bind mount していないので付け替えられる）。警告には、戻したキーの名前だけを出し、値は出さない
+  - 戻すのは、囲いの外の起動スクリプトが呼ぶ `bin/agent-box-restore-config.ts`（Node 26 でそのまま動かす。ほかの TS と同じくリントと型の確かめを通す）。写しの複製から作り始め、今の `.git/config` を `git config --file … --list -z`（各項目が「キー、改行、値、NUL」の形）で読み、残してよいものだけを `git config --file <新しいファイル> --add <キー> <値>` で順に足す（値に `=` や改行があっても崩れない。同じキーの値がいくつもあるものも、その順で足す。値を書かずにキーだけを置いたもの（`--list -z` で `key\0` と出て改行が無いもの）は、`true` として足す）。できたファイルを `.git/config` の隣に書き、名前の付け替えで入れ替える（`.git/config` は bind mount していないので付け替えられる）。警告には、戻したキーの名前だけを出し、値は出さない
   - submodule（`.git/modules/*/hooks`・`.git/modules/*/config`）と worktree（`.git/worktrees/*/config.worktree`）も同じように扱う（`hooks` は読むだけで重ね、`config` は写しを取って戻す）
   - 受け入れる: 残してよいもの以外の設定は、終わったときに消える（submodule の初期化は、囲いの中では続けて使えないので、囲いの外でする）。囲いが動いている間に、あなたが囲いの外で `.git/config` を変えると、残してよいもの以外は戻る
 - 追跡されるファイル（リポジトリの `hk.pkl`、justfile、スクリプトなど）の変更は、ふつうのコードの変更と同じく差分で見えるので受け入れる
@@ -110,7 +110,7 @@
 
 - 道具は読むだけで mount する: mise、rustup、cargo の本体、Go、`~/.local/share/claude/versions`、`~/.local/bin/agy`、`~/.pi/agent/bin`、Pi の本体の置き場
 - フックが呼ぶ道具も読むだけで mount する: `~/.config/agent-checks`（check-file）、cc-safety-net の本体と `~/.cc-safety-net`、deja のフック（`~/.config/deja`）、dotfiles の hk の設定（`~/.config/hk`）
-- フックと secret-scan が使う node・gitleaks・hk は、agent-box の `mise.toml` で版を固定する。起動スクリプトが囲いの外で `mise where` を使ってフルパスを決め、`AGENT_BOX_NODE`・`AGENT_BOX_GITLEAKS`・`AGENT_BOX_HK` で囲いに渡す。フックと secret-scan はこのフルパスだけを使う（プロジェクトの `mise.toml` が別の node を指定しても影響されない）
+- フックと secret-scan が使う node・gitleaks・hk は、agent-box の `mise.toml` で版を固定する。起動スクリプトが囲いの外で、agent-box の `mise.toml` のあるフォルダーを作業フォルダーにして `mise where` を使ってフルパスを決め（プロジェクトの `mise.toml` に影響されないように。版が入っていなければ `agent-box check` で起動を断る）、`AGENT_BOX_NODE`・`AGENT_BOX_GITLEAKS`・`AGENT_BOX_HK` で囲いに渡す。フックと secret-scan はこのフルパスだけを使う（プロジェクトの `mise.toml` が別の node を指定しても影響されない）
 - 囲いの中の `PATH` の順は、`inner-bin` → mise の shim（プロジェクトの道具のため）→ `/usr/bin` など
 - 取得のキャッシュは、囲い専用の書ける場所に分ける: cargo の registry、npm、uv、pnpm、mise の取得物、Pkl の取得物（hk の版が mise の hk と同じなら取りに行かないが、念のため）。分けるので、囲いの中で毒されたキャッシュを、ホストのビルドが使うことはない
 - mise: `MISE_STATE_DIR` と `MISE_CACHE_DIR` を、囲い専用の書ける場所に向ける。`MISE_TRUSTED_CONFIG_PATHS` にプロジェクトを入れる。道具の置き場は読むだけなので、入っていない道具は囲いの外で入れる
@@ -149,7 +149,7 @@
   - `PATH` で `~/.local/bin` より前に置く
   - 本物は、設定に書いたフルパスで呼ぶ（`PATH` から探さない）
   - `~/.local/bin` には置かない。もう本物が入っていて、自動更新が張り替えるため
-- **囲いの中の道具**: `inner-bin/`（1 段目は `gh`・`git-credential-agent-box`・`agent-box-ci`・`agent-box-secret-scan`）。読むだけで mount する。囲いの中の `PATH` からは、外側のラッパーのフォルダーを外す
+- **囲いの中の道具**: `inner-bin/`（1 段目は `gh`・`git-credential-agent-box`・`agent-box-ci`・`agent-box-secret-scan.ts`）。読むだけで mount する。囲いの中の `PATH` からは、外側のラッパーのフォルダーを外す
 - **T3 Code**: プロバイダーごとの Binary path を、画面で1回設定する。値は外側のラッパーのパス。Antigravity の分もファイル名が `agy` なので、T3 の判定（ファイル名が `agy` か `antigravity`）を通る。手順は README に書く
 - **`box sh`**: エージェントを起動せずにシェルだけを開く。あなたが依存のインストール（`npm install` など）を囲いの中で流すための入口（使うかは任意）
 - エージェントの入れ方:
@@ -196,7 +196,7 @@
   - sh と `curl --unix-socket` で動く（Node を起動しない）
   - 標準入力の `protocol=https` と `host=github.com` を確かめ、それ以外にはトークンを渡さない
 - `url.https://github.com/.insteadOf`: `git@github.com:` と `ssh://git@github.com/` の形を `https://github.com/` に書き換える
-- `core.hooksPath`: agent-box の読むだけのフックのフォルダー（`hooks/`）。`hooks/pre-commit` と `hooks/pre-push` は、まず gitleaks と `agent-box-secret-scan` を直接流し、止まらなければ `hk run <フック>` を呼ぶ（リポジトリの `hk.pkl` や `hk.local.pkl` は、名前が同じ段を上書きできるので、認証情報の確かめは hk に任せない）。hk はリポジトリの `hk.pkl` と共通の設定をいつもどおり読むので、リポジトリ固有の段も動く。リポジトリが自分で `.git/hooks` に入れたフック（prek・lefthook など）は、囲いの中では動かない
+- `core.hooksPath`: agent-box の読むだけのフックのフォルダー（`hooks/`）。`hooks/pre-commit` と `hooks/pre-push` は、まず `agent-box-secret-scan.ts`（自分の照合と gitleaks）を直接流し、止まらなければ `hk run <フック>` を呼ぶ（リポジトリの `hk.pkl` や `hk.local.pkl` は、名前が同じ段を上書きできるので、認証情報の確かめは hk に任せない）。hk はリポジトリの `hk.pkl` と共通の設定をいつもどおり読むので、リポジトリ固有の段も動く。リポジトリが自分で `.git/hooks` に入れたフック（prek・lefthook など）は、囲いの中では動かない
 
 ### gh（1 段目）
 
@@ -230,32 +230,35 @@
 
 ### 囲いの中の hk と gitleaks（1 段目から）
 
-- gitleaks と `agent-box-secret-scan` は、読むだけの `hooks/pre-commit` と `hooks/pre-push` が、hk より先に直接流す（上の「git（1 段目）」の `core.hooksPath`）。hk の設定には入れない。囲いの中の `~/.config/hk` には dotfiles の hk の設定を読むだけで mount する。囲いの外のあなたの hk は変えない
-- gitleaks は、次を必ず付けて流す: `--config`（agent-box の `gitleaks.toml`。リポジトリの `.gitleaks.toml` を使わせない）、`--redact`、`--ignore-gitleaks-allow`（行の末尾の `gitleaks:allow` を効かせない）、`-i`（agent-box の `share/empty/`。`.gitkeep` だけを置いた、読むだけで mount するフォルダーで、リポジトリの `.gitleaksignore` を使わせない）。`--baseline-path` は使わない
-- gitleaks の打ち方: pre-commit は `gitleaks git --staged`、pre-push は `gitleaks git --log-opts="<secret-scan と同じ範囲>"`
-- gitleaks の中で呼ばれる git にもエージェントの `.git/config` を効かせないため、`GIT_EXTERNAL_DIFF=` を渡し、`GIT_CONFIG_*` の後ろに `diff.external=`・`diff.noprefix=false`・`diff.mnemonicPrefix=false`・`color.ui=false` を足して渡す（囲いの `GIT_CONFIG_*` を上書きせず、`GIT_CONFIG_COUNT` を増やして足す）。`GIT_EXTERNAL_DIFF` を空にして外部の差分が使われなくなるか、gitleaks が中で `--no-ext-diff` を付けているかは確かめていないので、T052 のテストで確かめる
-- pre-push の標準入力は1回しか読めないので、フックが変数に取っておき、secret-scan・gitleaks・`hk run pre-push` のそれぞれに渡す
+- 認証情報の確かめは、読むだけの `hooks/pre-commit` と `hooks/pre-push` が、hk より先に `agent-box-secret-scan` を直接流す（上の「git（1 段目）」の `core.hooksPath`）。hk の設定には入れない。囲いの中の `~/.config/hk` には dotfiles の hk の設定を読むだけで mount する。囲いの外のあなたの hk は変えない
+- `agent-box-secret-scan`（`inner-bin/agent-box-secret-scan.ts`。Node 26 がそのまま動かすのは拡張子が `.ts` のファイルだけなので、拡張子を付ける。フックは `AGENT_BOX_NODE` で呼ぶ）が、差分を1回だけ作り、自分の照合（値をそのまま比べる）と gitleaks の両方に流す。両方が同じ差分を見る
+- gitleaks は `gitleaks stdin` で、標準入力から差分を読ませる（`gitleaks git` は使わない。`git --staged` と `--log-opts` の形では、`-i` を空のフォルダーに向けてもリポジトリの `.gitleaksignore` が読まれ、`color.diff=always`・textconv・`-diff`・`binary`・NUL で、見つかる件数が 0 になったため。gate.md の G8）
+  - 作業フォルダーを `share/empty/`（`.gitkeep` だけを置いた、読むだけで mount するフォルダー）にして流す。リポジトリの `.gitleaksignore` と `.gitleaks.toml` を読ませない
+  - 必ず付ける: `--config`（agent-box の `gitleaks.toml`）、`--redact`、`--ignore-gitleaks-allow`（行の末尾の `gitleaks:allow` を効かせない）。`--baseline-path` は使わない
+  - gitleaks から受け取るのは、見つかったかどうか（終了コード）だけ。ファイルと行は secret-scan が出す
+  - gitleaks の標準入力へ書くときの `EPIPE` を扱う。gitleaks の終了コードが 0 でなければ、見つかった（1）ときも、それ以外の異常で終わったときも、全部通さない（fail-closed）
+- pre-push の標準入力は1回しか読めないので、フックが変数に取っておき、secret-scan と `hk run pre-push` のそれぞれに渡す
 - gitleaks の規則は agent-box の `gitleaks.toml` に書く。既定の規則を使ったうえで、次を足す:
   - Claude のログインのトークン（`sk-ant-oat01-`。更新に使うトークンの形は、確かめてから足す）
   - Google の OAuth（`ya29.`・`1//`・`GOCSPX-`）
   - OpenCode の API キー（形は、確かめてから足す）
   - Woodpecker のトークンの形
   - Codex（ChatGPT）のログインのトークン（形は、確かめてから足す）
-- `agent-box-secret-scan`（node のスクリプト）は、認証のファイルと、API キーの環境変数の値を取り出し、commit や push する差分に含まれていないかを、値をそのまま比べて調べる。形の規則に頼らないので、新しい形でも、書き写されたものでも見つかる
+- `agent-box-secret-scan` の自分の照合は、認証のファイルと、API キーの環境変数の値を取り出し、commit や push する差分に含まれていないかを、値をそのまま比べて調べる。形の規則に頼らないので、新しい形でも、書き写されたものでも見つかる
   - どのファイルとどの変数を見るかは、起動スクリプトが `profiles/*.conf` からパスと変数の名前だけを抜き出した一覧にして、囲いの中に読むだけで mount する（値は入れない）
   - 照合は node のスクリプトの中で完結させる。値は node のメモリの中だけに持ち、引数・環境変数・一時ファイルに出さない（sh のパイプで `grep -f` に渡す形は使わない。パイプは2回目に空になり、`grep` の種類で空のパターンの扱いが逆になり、行の番号が差分全体での番号になり、終了コードが最後の `cut` のものになるため）
   - 値は、JSON の文字列の値と環境変数の値を改行で分け、16 文字以上のものだけを使う
   - 差分は node が `spawn` で読み、行ごとに処理する（`execFile` は既定で 1MB を超える出力で落ちるため。引数に値は入らない）
-  - 差分を読む git には、いつも `-c diff.external= -c diff.noprefix=false -c diff.mnemonicPrefix=false -c color.ui=false` と `--no-ext-diff --no-textconv --no-color --no-renames` を付ける（エージェントが `.git/config` や `.gitattributes` に書いた外部の差分・textconv・色・接頭辞の変更で、差分を差し替えられないように。rulebook が止めるのはエージェントが打つ `git -c` で、フックが付けるのは構わない）
+  - 差分を作る git には、いつも `--no-ext-diff --no-textconv --no-color --no-renames --text --src-prefix=a/ --dst-prefix=b/` と `-c core.quotePath=false` を付ける（エージェントが `.git/config` や `.gitattributes` に書いた外部の差分・textconv・色・`-diff`・`binary`・接頭辞（`diff.noprefix`・`diff.mnemonicPrefix`・`diff.srcPrefix`・`diff.dstPrefix`）・パスの引用符の変更で、差分を差し替えられたり、ファイル名の取り出しを崩されたりしないように。rulebook が止めるのはエージェントが打つ `git -c` で、フックが付けるのは構わない）。`-c diff.external=` と `GIT_EXTERNAL_DIFF=`（空の値）は使わない（空は「設定なし」として扱われず、`--no-ext-diff` の無い `git diff` が落ちるため）
     - pre-commit: `git diff --cached -U0`
     - pre-push（標準入力の行ごと）:
       - ローカルの SHA が `0000…`（削除の push）なら飛ばす
       - リモートの SHA が `0000…` でなく、ローカルにあるなら `git log -p -m -U0 <remote_sha>..<local_sha>`
-      - リモートの SHA が `0000…`（新しいブランチ）か、ローカルに無い（ほかの人が push した直後など）なら、写しにある `refs/remotes/*` の SHA を除いて `git log -p -m -U0 <local_sha> --not <写しの SHA…>`。写しの `refs/remotes/*` が 0 件なら `--not` を付けずに `<local_sha>` だけを渡す（履歴を全部調べるので遅くなりうるのは受け入れる）。囲いの中で作られた `refs/remotes/*`（偽物も含む）は除かない
+      - リモートの SHA が `0000…`（新しいブランチ）か、ローカルに無い（ほかの人が push した直後など）なら、push 先が今持っている SHA を聞いて、そのうちローカルにあるものを除く: `git -c protocol.ext.allow=never ls-remote --branches --tags <push 先の URL>`（`refs/pull/*` などの、マージされていない PR の参照を拾わないよう、ブランチとタグだけを聞く。git 2.56 で `--branches` が通らなければ `--heads --tags`。どちらが通るかは T052 で確かめる）で SHA を得て、`git cat-file -e "<sha>^{commit}"`（注釈付きのタグも扱う）でローカルにあるものだけを残し、`git log -p -m -U0 <local_sha> --not <その SHA…>` にする。1つも残らなければ `--not` を付けずに `<local_sha>` だけを渡す（履歴を全部調べるので遅くなりうるのは受け入れる）。`ls-remote` が落ちたら通さない
+      - 囲いの中の `refs/remotes/*` は使わない（エージェントが偽の参照を作れば、範囲を空にできるため）
       - `-m` で、マージコミットで入った内容も調べる
-      - gitleaks の `--log-opts` にも同じ範囲を渡す
   - 差分の区切りの行（`@@ … +<行> …`）から、どのファイルの何行目かを出す。値と行の中身は出さない
-  - 見つかったら終了コード 1。node が落ちたときや、見る一覧が読めないときも通さない（fail-closed）
+  - 見つかったら終了コード 1。node が落ちたとき、見る一覧が読めないとき、gitleaks が 0 以外で終わったときも通さない（fail-closed）
 - トークンの形は、エージェントを移すときに、本物のファイルに規則を当てて件数だけで確かめる。値も先頭の文字も画面に出さない
 
 ### cc-safety-net（1 段目から）

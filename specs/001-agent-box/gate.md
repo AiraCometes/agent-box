@@ -99,6 +99,25 @@
 | X5 | gitleaks は pre-commit で `git --staged`、pre-push で `git --log-opts`。secret-scan は `spawn` で行ごとに読み、`-m` でマージの内容も見る。pre-push の標準入力は変数に取っておき、それぞれに渡す |
 | X6 | `.git/config` は、囲いの外の node のスクリプトが、`--list -z` で読み、残してよいものを `--add` で足したファイルに付け替える。警告にはキーの名前だけを出す |
 
+## 決めたこと（Sonnet 5.5 の4回目のレビューで足したもの、Y1〜Y5）
+
+| # | 決めたこと |
+|---|---|
+| Y1 | 差分は `agent-box-secret-scan.ts` が1回だけ作り、自分の照合と `gitleaks stdin` の両方に流す。gitleaks は `share/empty/` で流し、0 以外の終了と `EPIPE` は全部通さない。差分を作る git に `--text --src-prefix=a/ --dst-prefix=b/ -c core.quotePath=false` を足す。`-c diff.external=` と `GIT_EXTERNAL_DIFF=` は使わない（X1 の一部を置き換えた） |
+| Y2 | 新しいブランチの push で除く範囲は、`git ls-remote --branches --tags`（通らなければ `--heads --tags`）で push 先に聞き、`git cat-file -e "<sha>^{commit}"` でローカルにあるものだけにする。囲いの中の `refs/remotes/*` と写しは使わない（X2 を置き換えた） |
+| Y3 | `.git/config` を戻すスクリプトは `bin/agent-box-restore-config.ts` で、T032 で書く。commit が止まる確かめは T057 として T053 のあとに回す |
+| Y4 | `mise where` は agent-box の `mise.toml` のあるフォルダーで流す。版が入っていなければ起動を断る |
+| Y5 | 値の無いキーは `true` として戻す |
+
+## G8 4回目のレビューで、レビューの側が確かめたこと（2026-11-24、gitleaks 8.30.1・git 2.56.1）
+
+- `--no-ext-diff --no-textconv --no-color --no-renames` と `-c diff.noprefix=false -c diff.mnemonicPrefix=false` で、`.git/config` の `diff.external`・textconv・`color.diff=always`・`noprefix`・`mnemonicPrefix` と `.gitattributes` の `diff=x` を打ち消せた
+- `-c diff.external=`（空）や `GIT_EXTERNAL_DIFF=`（空）は「設定なし」にならず、`--no-ext-diff` の無い `git diff` は `cannot run` で落ちた。gitleaks は自分で `--no-ext-diff` を付けている
+- `gitleaks git` は、`-i` を空のフォルダーに向けても、調べる場所の `.gitleaksignore` を読んだ。`color.diff=always`（`color.ui=false` より強い）・textconv・`-diff`・`binary`・NUL で、見つかる件数が 0 になった。`--log-opts` に `-m` が無いと、マージだけで入った内容が見えなかった
+- 差分を作る側で `--text` などを付けて `gitleaks stdin` に渡し、作業フォルダーを空のフォルダーにすると、見つかり、リポジトリの `.gitleaksignore` は効かなかった
+- `--no-ext-diff` などを付けても、`-diff`・`binary`・NUL のファイルは `--text` が無いと `Binary files … differ` になった。`diff.srcPrefix`・`diff.dstPrefix`・`core.quotePath` で、ファイル名の形が変わった
+- `git config --list -z` は「キー、改行、値、NUL」の形で、値に `=` や改行があっても `--add` で崩れずに戻せた。値の無いキーは `key\0` で、改行が無い
+
 ## G7 3回目のレビューで、レビューの側が一時リポジトリで確かめたこと（2026-11-24）
 
 - `diff.external` を置くと `git diff --cached` はそのプログラムを動かし、秘密の行が出なくなった。`.gitattributes` の `diff=x` と `diff.x.textconv` でも同じ。`--no-ext-diff --no-textconv` を付けると見つかった
