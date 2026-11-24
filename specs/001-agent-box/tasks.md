@@ -20,7 +20,7 @@
 
 ## 囲い（bin/agent-box）
 
-- [ ] T030 [テスト先] bats で、組み立てた bwrap の引数を確かめる: ホームが tmpfs、書けるフォルダーが先で読むだけのファイルが後、読むだけの設定、無いファイルを `{}` で作ること、`/init`・`/run/WSL`・`/mnt` を見せないこと、`WSL_INTEROP` と `WOODPECKER_TOKEN` を消すこと、`AGENT_BOX=1` のときは包まずに本物を exec すること、外側のラッパーのフォルダーを `PATH` から外すこと、`GIT_CONFIG_*`（身元・credential.helper・insteadOf）
+- [ ] T030 [テスト先] bats で、組み立てた bwrap の引数を確かめる: ホームが tmpfs、`/tmp` が tmpfs、書けるフォルダーが先で読むだけのファイルが後、読むだけの設定、無いものを作るときの中身（`.json` は `{}`、ほかのファイルは空、フォルダーは空のフォルダー）、`/init`・`/run/WSL`・`/mnt` を見せないこと、環境変数を全部消して決めたものだけを渡すこと（`WSL_INTEROP` と `WOODPECKER_TOKEN` が渡らない）、プロジェクトの決め方と起動を断る場所（git の外、ホームとその上、`/mnt` の下）、同じ絶対パスに mount すること、worktree の元の `.git` を mount すること、T3 から起動したときに足すもの、`AGENT_BOX=1` のときは包まずに本物を exec すること、外側のラッパーのフォルダーを `PATH` から外すこと、`GIT_CONFIG_*`（身元・credential.helper・insteadOf）
 - [ ] T031 [テスト先] bats で `.env` を確かめる: `.env` と `.env.*` に重ねる、見本を除く、`.git`・`target`・`node_modules`・`.venv` を探さない、追跡されているものには重ねずに警告する
 - [ ] T032 T030・T031 を通す `bin/agent-box` を書く（位置パラメータで組み立てる、`exec` で置き換えない、`trap` で片付ける）
 - [ ] T033 本人の端末で、本物の bwrap を使って `~/.ssh` が見えないこと、`.env` が読めないこと、`cmd.exe` が動かないことを確かめ、`gate.md` に記録する
@@ -38,6 +38,14 @@
 - [ ] T050 [テスト先] bats で `git-credential-agent-box` を確かめる: `protocol=https` と `host=github.com` 以外にはトークンを渡さない
 - [ ] T051 T050 を通す `git-credential-agent-box`、`gh`、`agent-box-ci` を sh と `curl --unix-socket` で書く
 
+## 認証情報を GitHub に上げないための確かめ（1 段目）
+
+- [ ] T052 [テスト先] bats で、`gitleaks.toml`（既定の規則と、Claude のログイン・Google の OAuth・OpenCode・Woodpecker・Codex の形）と `agent-box-secret-scan`（認証のファイルの値と `grep -F` で比べる）が、見本の値を見つけ、値を出さずにファイルと行だけを出すことを確かめる。見本の値は、本物の形に似せた偽物にする
+- [ ] T053 T052 を通す `gitleaks.toml`・`inner-bin/agent-box-secret-scan`・囲いの中用の `hk/config.pkl`（dotfiles の設定を読み込み、pre-commit と pre-push に gitleaks と secret-scan を足す）を書く
+- [ ] T054 cc-safety-net の `policy.json`（`strict`、読ませない場所に `~/.config/agent-box` と `~/.config/gh`）と rulebook（`--no-verify`・`-n`・`git -c`・`--config-env`・`unset GIT_CONFIG_COUNT`・`env -u GIT_CONFIG_COUNT`・`gh pr merge`・`gh repo delete`・`gh repo edit --visibility`）を、止める見本と通る見本つきで書き、CI で `rule verify` を流す
+- [ ] T055 `agent-box check` に、cc-safety-net が各エージェントに組み込まれているかの確かめを足す
+- [ ] T056 README に、エージェントの認証が漏れたときの取り消し方（Claude のログアウトとセッションの取り消し、API キーの作り直し、Codex のログアウト）を書く
+
 ## 移す（1つごとに、記録用の包みで実際の動きを記録してから受け入れる）
 
 - [ ] T060 Claude Code を移す。組み込みの囲いを切り、T3 の Binary path を設定する。受け入れを `gate.md` に記録する
@@ -50,3 +58,9 @@
 - [ ] T070 dotfiles で、リンク・設定のファイル・systemd のユニットを chezmoi に入れ、CLAUDE.md・AGENTS.md・GEMINI.md の CI のログの読み方を `agent-box-ci` に書き換える
 - [ ] T071 4つとも移ったあと、dotfiles から srt・in-srt・verify-commits・agent-git・SPEC-025 を外す
 - [ ] T072 README にセットアップの手順（GitHub App、T3 の Binary path、更新のしかた）を書く
+
+## 2 段目: GitHub への書き込みの窓口（囲いが落ち着いてから）
+
+- [ ] T080 記録用の包みで、git の remote helper のやりとり（`list for-push`・`push` と、push の選択肢）と、gh の `http_unix_socket` の動き（トークンが無いときの扱い、使うサブコマンドごと）を記録して `gate.md` に書く
+- [ ] T081 [テスト先] bats と node:test で、`git-remote-agentbox` と窓口の push（範囲を調べる、見つかれば断ってファイルと行だけを返す、フックと設定を使わずに決まった URL へ push する）と、gh の中継（本文を調べる）を確かめる
+- [ ] T082 T081 を通す。切り替えたら、1 段目の書けるトークンを外し、囲いの中には読むだけのトークンだけを渡す

@@ -40,6 +40,34 @@
 | Q33 | Claude・Pi・Antigravity は公式の curl の入れ方のまま。Codex は公式が勧める入れ方 |
 | Q35 | 設定は `key = value` の `.conf`（key の繰り返しで一覧、知らない key はエラー）。`agent-box check` を付ける |
 
+## 決めたこと（仕様のレビューと、認証情報の扱いで足したもの）
+
+| # | 決めたこと |
+|---|---|
+| Q43 | エージェント自身の認証は、囲いの中から読めることを受け入れる。漏れたときの取り消し方を README に書く |
+| Q46・Q47 | 2段階で作る。1 段目は囲いの中の hk（gitleaks と、値をそのまま比べる secret-scan）と cc-safety-net で止める。2 段目で、GitHub への書き込みを全部窓口に通す（素の `git push` は `pushInsteadOf` と remote helper、gh は `http_unix_socket`） |
+| S1 | push protection は三つ目の網として扱い、頼りにしない。Claude のログインのトークンなどは、hk が流す gitleaks に自分で足す規則で止める |
+| S2 | 無いものを先に作るとき、`.json` は `{}`、ほかのファイルは空、フォルダーは空のフォルダー |
+| S3 | Woodpecker の秘密は、main への push と tag だけで渡す |
+| S4 | プロジェクトは git の最上位。git の外、ホームとその上、`/mnt` の下では起動を断る |
+| S5 | プロジェクトは同じ絶対パスに mount する。worktree なら元の `.git` も mount する |
+| S6 | T3 から起動したときは、Antigravity の `--gemini-dir`（書ける）、`T3_ACP_MCP_NODE` と `T3_PI_MCP_EXTENSION_PATH`（読むだけ）を足す |
+| S7 | 環境変数は全部消して、決めたものだけを渡す |
+| S8 | フックが呼ぶ道具（check-file、hk、cc-safety-net、deja）は読むだけで mount する |
+| S9・C3 | cc-safety-net の rulebook で、フックを飛ばす書き方を止める（`--no-verify`・`-n`・`git -c`・`--config-env`・`unset GIT_CONFIG_COUNT` など）。止められないものは 1 段目では受け入れる |
+| S10 | `/tmp` は起動ごとの tmpfs |
+| S12 | 囲いの外のあなたの commit と push は、agent-box の範囲に入れない |
+| C1 | cc-safety-net の policy と rulebook は agent-box が持ち、`agent-box check` で各エージェントへの組み込みを確かめる |
+| C2 | cc-safety-net は `strict`。読ませない場所に `~/.config/agent-box` と `~/.config/gh` を足す |
+| C4 | gitleaks は囲いの中用の hk の設定で流す。規則に Claude のログイン・Google の OAuth・OpenCode・Woodpecker・Codex の形を足す |
+
+## G5 認証情報を止める仕組みで分かったこと（2026-11-24、公式の文書と道具のソースから）
+
+- GitHub の push protection: Claude のログインのトークン（`sk-ant-oat01-`）は既定の検出に無い。Google と Gemini の API キーは、見つけても push のときに断らない。App の installation token での push に効くかは、文書に書かれていない。Issue・PR・コメントの本文は、上がったあとに知らせるだけ。個人の public なリポジトリでは、自分で規則を足せない
+- gitleaks 8.30.1・betterleaks・trufflehog のどの既定の規則にも、`sk-ant-oat01-` は無い。gitleaks は Google の OAuth（`ya29.`・`GOCSPX`）も無い。gitleaks は MIT の単体のバイナリで、mise（`aqua:gitleaks/gitleaks`）で入れられ、`git --staged` と `--log-opts` で範囲を調べられる
+- gh 2.104.0 には、API の通信を Unix ソケットに流す `http_unix_socket` の設定がある
+- cc-safety-net: 自分で足す規則は、語を文字どおりに比べる（前方の一致や正規表現は使えない）。頭に付けた環境変数は見ない。組み込みで、coding CLI の認証のトークンと `.git/hooks` への書き込みを止める
+
 ## G1 WSL の interop を囲いの中で塞げるか（本人の端末、囲いの外）
 
 - `cmd.exe` を `/tmp` に写し、bwrap の中から `cmd.exe /c echo INTEROP_WORKS` を流した
