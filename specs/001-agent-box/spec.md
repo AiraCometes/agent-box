@@ -56,8 +56,14 @@
 `.git/hooks` と `.git/config` は追跡されず差分にも出ないのに、あなたが囲いの外で git を使ったときに、そこに書かれたものが囲いの外で動く。
 
 - `.git/hooks`（worktree なら元のリポジトリの `.git/hooks` も）は、書ける `.git` の上から読むだけで重ねる。無ければ空のフォルダーを作ってから重ねる
-- `.git/config` は書けるままにする（読むだけにすると `git switch -c` などが落ちる）。起動したときに写しを取り、囲いが終わったときに、`branch.*` 以外のキーの変更・追加・削除を、キーごとに写しの値へ戻して警告する（危ないキーを並べるのではなく、残してよい `branch.*` だけを残す）
-  - 受け入れる: エージェントが `git remote add` などで足した設定は、終わったときに消える。囲いが動いている間に、あなたが囲いの外で `.git/config` の `branch.*` 以外を変えると、その変更も戻る
+- `.git/config` は書けるままにする（読むだけにすると `git switch -c` などが落ちる）。起動したときに写しを取り、囲いが終わったときに、残してよいもの以外のキーの変更・追加・削除を、キーごとに写しの値へ戻して警告する（危ないキーを並べるのではなく、残してよいものだけを決める）
+  - 残してよいもの:
+    - `branch.*`。ただし、消えたリモートを指す `branch.<x>.remote` は戻す
+    - 起動したときに無かったリモートの `remote.<名前>.url` と `remote.<名前>.fetch`。url は `https://`・`git@github.com:`・`ssh://git@github.com/` で始まるものだけ（`ext::` などでのコマンドの実行を防ぐ）。すでにあったリモートを変えたものと、ほかのキー（`pushurl`・`uploadpack`・`receivepack`・`proxy` など）は戻す
+  - 写しは `.git` の外の `~/.local/state/agent-box/<リポジトリの hash>/` に置く。起動するときは、まず残っている写しで戻し（前回 `kill -9` などで戻せなかった分）、そのあとで新しい写しを取る
+  - 同じリポジトリで同時に動くセッションは、`flock` の中で数える。記録のファイルの数ではなく、記録した PID とプロセスの起動時刻（`/proc/<pid>/stat` の starttime）が両方合うものを生きているとみなし（`kill -0` だけでは、使い回された PID を生きていると取り違えるため）、死んだセッションの記録を消したうえで、最後に生きているセッションだけが戻す
+  - submodule（`.git/modules/*/hooks`・`.git/modules/*/config`）と worktree（`.git/worktrees/*/config.worktree`）も同じように扱う（`hooks` は読むだけで重ね、`config` は写しを取って戻す）
+  - 受け入れる: 残してよいもの以外の設定は、終わったときに消える（submodule の初期化は、囲いの中では続けて使えないので、囲いの外でする）。囲いが動いている間に、あなたが囲いの外で `.git/config` を変えると、残してよいもの以外は戻る
 - 追跡されるファイル（リポジトリの `hk.pkl`、justfile、スクリプトなど）の変更は、ふつうのコードの変更と同じく差分で見えるので受け入れる
 
 ### ホームとファイル
@@ -72,7 +78,7 @@
 ### 環境変数
 
 - いったん全部消して（`--clearenv`）、決めたものだけを渡す
-- 共通: `PATH`（囲い用に作り直す）、`HOME`、`USER`、`LANG`、`TERM`、`TZ`、`TMPDIR`、`AGENT_BOX`、`GIT_CONFIG_*`、自動更新を切る変数
+- 共通: `PATH`（囲い用に作り直す）、`HOME`、`USER`、`LANG`、`TERM`、`TZ`、`TMPDIR`、`AGENT_BOX`、`GIT_CONFIG_*`、自動更新を切る変数、`HK_CHECK=1`（フックがファイルを書き換えない）、`HK_STASH_UNTRACKED=0`（追跡していないファイルを退避しない。塞いだ `.env` を動かそうとして `EBUSY` で落ちないように）
 - エージェントごと: `profiles/<エージェント>.conf` に書く（例: Antigravity の `GEMINI_API_KEY`・`GOOGLE_API_KEY`・`GEMINI_HOME`、T3 の `T3_*`）
 - 一覧に無い変数は渡さない（`WSL_INTEROP` と `WOODPECKER_TOKEN` も渡らない）
 
@@ -184,7 +190,7 @@
   - sh と `curl --unix-socket` で動く（Node を起動しない）
   - 標準入力の `protocol=https` と `host=github.com` を確かめ、それ以外にはトークンを渡さない
 - `url.https://github.com/.insteadOf`: `git@github.com:` と `ssh://git@github.com/` の形を `https://github.com/` に書き換える
-- `core.hooksPath`: agent-box の読むだけのフックのフォルダー（`hooks/`）。そこのスクリプトが `hk run <フック>` を流す。リポジトリが自分で `.git/hooks` に入れたフック（prek など）は、囲いの中では動かない。チェックは hk の設定に寄せる
+- `core.hooksPath`: agent-box の読むだけのフックのフォルダー（`hooks/`）。`hooks/pre-commit` と `hooks/pre-push` は、まず gitleaks と `agent-box-secret-scan` を直接流し、止まらなければ `hk run <フック>` を呼ぶ（リポジトリの `hk.pkl` や `hk.local.pkl` は、名前が同じ段を上書きできるので、認証情報の確かめは hk に任せない）。hk はリポジトリの `hk.pkl` と共通の設定をいつもどおり読むので、リポジトリ固有の段も動く。リポジトリが自分で `.git/hooks` に入れたフック（prek・lefthook など）は、囲いの中では動かない
 
 ### gh（1 段目）
 
@@ -211,14 +217,15 @@
 | エージェント自身の認証 | ホームの今の場所 | 状態として書けるように mount する（「守るものと受け入れるもの」） |
 
 - 窓口は、起動したときに `.pem` と Woodpecker のトークンのファイルの権限を確かめる。600 より広ければ起動しない
-- agent-box と dotfiles の `.gitignore` に、鍵・トークン・`.env` などの形を入れる。認証情報をリポジトリに置かないことが前提で、`.gitignore` はそれが破れたときの受け止め（`git add -f` や、中身を書き写されることは止められない）
+- agent-box と dotfiles の `.gitignore` に、鍵・トークン・`.env` などの形を入れる。認証情報をリポジトリに置かないことが前提で、`.gitignore` はそれが破れたときの受け止め（`git add -f` や、中身を書き写されることは止められない）。agent-box の `.gitignore` は、秘密の形に当たってしまうコードのファイルだけを、ファイルごとに残す（フォルダーを丸ごと残さない）
+- テストの見本の値（本物の形に似せた偽物）は、リポジトリに入れない。bats の `setup` で文字列をつなげて作り、`$BATS_TEST_TMPDIR` に置く（リポジトリの gitleaks にも、GitHub の push protection にも止められないように）
 
 ## 認証情報を GitHub に上げないための確かめ
 
 ### 囲いの中の hk と gitleaks（1 段目から）
 
-- agent-box が、囲いの中用の hk の設定（`hk/config.pkl`）を持つ。dotfiles の hk の設定を読み込んだうえで、gitleaks の段と `agent-box-secret-scan` の段を、pre-commit と pre-push に足す。囲いの中では、これを `~/.config/hk` に読むだけで mount し、読み込む dotfiles の設定は本物のパスに読むだけで mount する。囲いの外のあなたの hk は変えない
-- gitleaks は、次を必ず付けて流す: `--config`（agent-box の `gitleaks.toml`。リポジトリの `.gitleaks.toml` を使わせない）、`--redact`、`--ignore-gitleaks-allow`（行の末尾の `gitleaks:allow` を効かせない）、`-i`（中身の無い読むだけの場所。リポジトリの `.gitleaksignore` を使わせない）。`--baseline-path` は使わない
+- gitleaks と `agent-box-secret-scan` は、読むだけの `hooks/pre-commit` と `hooks/pre-push` が、hk より先に直接流す（上の「git（1 段目）」の `core.hooksPath`）。hk の設定には入れない。囲いの中の `~/.config/hk` には dotfiles の hk の設定を読むだけで mount する。囲いの外のあなたの hk は変えない
+- gitleaks は、次を必ず付けて流す: `--config`（agent-box の `gitleaks.toml`。リポジトリの `.gitleaks.toml` を使わせない）、`--redact`、`--ignore-gitleaks-allow`（行の末尾の `gitleaks:allow` を効かせない）、`-i`（agent-box の `share/empty/`。読むだけで mount する空のフォルダーで、リポジトリの `.gitleaksignore` を使わせない）。`--baseline-path` は使わない
 - gitleaks の規則は agent-box の `gitleaks.toml` に書く。既定の規則を使ったうえで、次を足す:
   - Claude のログインのトークン（`sk-ant-oat01-`。更新に使うトークンの形は、確かめてから足す）
   - Google の OAuth（`ya29.`・`1//`・`GOCSPX-`）
@@ -227,9 +234,13 @@
   - Codex（ChatGPT）のログインのトークン（形は、確かめてから足す）
 - `agent-box-secret-scan`（sh）は、認証のファイルと、API キーの環境変数の値を取り出し、commit や push する差分に含まれていないかを `grep -F` で比べる。形の規則に頼らないので、新しい形でも、書き写されたものでも見つかる
   - どのファイルとどの変数を見るかは、起動スクリプトが `profiles/*.conf` からパスと変数の名前だけを抜き出した一覧にして、囲いの中に読むだけで mount する（値は入れない）
-  - 値の取り出しは node でする（JSON の文字列の値のうち一定の長さ以上のもの）。空の値は除く（grep は空のパターンを何にでも当たるものとみなすため）
-  - 値は、引数・環境変数・一時ファイルに出さない。パイプからファイル記述子で渡す: `node … | { exec 3<&0; git diff --cached | grep -n -F -f /dev/fd/3 | cut -d: -f1; }`（ファイルごとに分けて流す）
-  - 見つかっても値と行の中身は出さず、どのファイルの何行目かだけを出す
+  - 照合は node のスクリプトの中で完結させる。値は node のメモリの中だけに持ち、引数・環境変数・一時ファイルに出さない（sh のパイプで `grep -f` に渡す形は使わない。パイプは2回目に空になり、`grep` の種類で空のパターンの扱いが逆になり、行の番号が差分全体での番号になり、終了コードが最後の `cut` のものになるため）
+  - 値は、JSON の文字列の値と環境変数の値を改行で分け、16 文字以上のものだけを使う
+  - 差分は node が `execFile` で読む（引数に値は入らない）:
+    - pre-commit: `git diff --cached -U0`
+    - pre-push（標準入力の行ごと）: リモートの SHA が `0000…` でなければ `git log -p -U0 <remote_sha>..<local_sha>`、`0000…`（新しいブランチ）なら `git log -p -U0 <local_sha> --not --remotes`。ローカルの SHA が `0000…`（削除の push）なら飛ばす
+  - 差分の区切りの行（`@@ … +<行> …`）から、どのファイルの何行目かを出す。値と行の中身は出さない
+  - 見つかったら終了コード 1。node が落ちたときや、見る一覧が読めないときも通さない（fail-closed）
 - トークンの形は、エージェントを移すときに、本物のファイルに規則を当てて件数だけで確かめる。値も先頭の文字も画面に出さない
 
 ### cc-safety-net（1 段目から）
@@ -307,7 +318,8 @@
     - 環境変数を全部消して、決めたものだけを渡すこと（`WSL_INTEROP` と `WOODPECKER_TOKEN` が渡らない）
     - `/run/WSL` を見せないこと
     - 設定のファイルの読み方
-    - `agent-box-secret-scan` と gitleaks の規則が、見本の値を見つけ、値を出さないこと
+    - `agent-box-secret-scan` と gitleaks の規則が、見本の値を見つけ、値を出さないこと（見本はテストの中で作る）
+    - `kill -9` のあと、次に起動したときに `.git/config` が戻ること
   - **node:test**: 偽の GitHub と偽の Woodpecker を立てて、次を確かめる
     - トークンのリポジトリと権限が絞られること
     - キャッシュの期限が切れたら再発行すること
@@ -321,7 +333,8 @@
   - `cmd.exe` が動かない
   - `git push` が通る（2 段目では窓口を通る）
   - T3 のツールが動く
-  - 見本の認証の値を書いたファイルの commit が、hk で止まる
+  - 見本の認証の値を書いたファイルの commit が、`hooks/pre-commit` で止まる
+  - agent-box のリポジトリで、リポジトリ固有の hk の段（check の側）が囲いの中で通る
 - **順番**:
   1. GitHub の側: App を作る、ruleset を掛ける、push protection を有効にする、Woodpecker の秘密と承認を設定する
   2. このリポジトリで、囲いと窓口（1 段目）を実装し、単体テストを書く

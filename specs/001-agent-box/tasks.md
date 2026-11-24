@@ -20,10 +20,10 @@
 
 ## 囲い（bin/agent-box）
 
-- [ ] T030 [テスト先] bats で、組み立てた bwrap の引数を確かめる: ホームが tmpfs、`/tmp` が tmpfs、書けるフォルダーが先で読むだけのファイルが後、読むだけの設定、無いものを作るときの中身（`.json` は `{}`、ほかのファイルは空、フォルダーは空のフォルダー）、`/init`・`/run/WSL`・`/mnt` を見せないこと、環境変数を全部消して決めたものだけを渡すこと（`WSL_INTEROP` と `WOODPECKER_TOKEN` が渡らない）、プロジェクトの決め方と起動を断る場所（git の外、ホームとその上、`/mnt` の下）、同じ絶対パスに mount すること、worktree の元の `.git` を mount すること、T3 から起動したときに足すもの、`AGENT_BOX=1` のときは包まずに本物を exec すること、外側のラッパーのフォルダーを `PATH` から外すこと、`GIT_CONFIG_*`（身元・`credential.helper = agent-box`・insteadOf・`core.hooksPath`。git から `git credential fill` を呼んで helper に届くこと）、`--unshare-pid` と新しい `/proc`・`--die-with-parent` を付け `--new-session` を付けないこと、`/mnt/wsl/resolv.conf` があるときだけ mount すること、`.git/hooks`（worktree なら元のものも）を読むだけで重ねること、終わったときに `.git/config` の `branch.*` 以外の変更を写しへ戻すこと、`MISE_STATE_DIR`・`MISE_CACHE_DIR`・`MISE_TRUSTED_CONFIG_PATHS`、Claude の `managed-settings.json` を mount すること、書けるのは親のフォルダーごとで単一のファイルを書けるように mount しないこと、`trap` が `EXIT`・`INT`・`TERM`・`HUP` で片付けること
+- [ ] T030 [テスト先] bats で、組み立てた bwrap の引数を確かめる: ホームが tmpfs、`/tmp` が tmpfs、書けるフォルダーが先で読むだけのファイルが後、読むだけの設定、無いものを作るときの中身（`.json` は `{}`、ほかのファイルは空、フォルダーは空のフォルダー）、`/init`・`/run/WSL`・`/mnt` を見せないこと、環境変数を全部消して決めたものだけを渡すこと（`WSL_INTEROP` と `WOODPECKER_TOKEN` が渡らない）、プロジェクトの決め方と起動を断る場所（git の外、ホームとその上、`/mnt` の下）、同じ絶対パスに mount すること、worktree の元の `.git` を mount すること、T3 から起動したときに足すもの、`AGENT_BOX=1` のときは包まずに本物を exec すること、外側のラッパーのフォルダーを `PATH` から外すこと、`GIT_CONFIG_*`（身元・`credential.helper = agent-box`・insteadOf・`core.hooksPath`。git から `git credential fill` を呼んで helper に届くこと）、`--unshare-pid` と新しい `/proc`・`--die-with-parent` を付け `--new-session` を付けないこと、`/mnt/wsl/resolv.conf` があるときだけ mount すること、`.git/hooks`（worktree なら元のものも）を読むだけで重ねること、終わったときに `.git/config` の残してよいもの以外の変更を写しへ戻すこと（`branch.*` と、新しいリモートの `url`・`fetch` だけを残す。url は `https://`・`git@github.com:`・`ssh://git@github.com/` だけ。消えたリモートを指す `branch.<x>.remote` は戻す）、写しを `~/.local/state/agent-box/<hash>/` に置き、`kill -9` のあと次に起動したときに戻ること、`flock` の中で PID と起動時刻が合う生きているセッションを数え、最後のセッションだけが戻すこと、submodule と worktree の `hooks` と `config` も同じに扱うこと、`HK_CHECK=1` と `HK_STASH_UNTRACKED=0` を渡すこと、gitleaks の `-i` を `share/empty/` に向けること、`MISE_STATE_DIR`・`MISE_CACHE_DIR`・`MISE_TRUSTED_CONFIG_PATHS`、Claude の `managed-settings.json` を mount すること、書けるのは親のフォルダーごとで単一のファイルを書けるように mount しないこと、`trap` が `EXIT`・`INT`・`TERM`・`HUP` で片付けること
 - [ ] T031 [テスト先] bats で `.env` を確かめる: `.env`・`.env.*`・`.envrc`・`.npmrc`・`.pypirc` に重ねる、シンボリックリンクならリンクの先にも重ねる、見本を除く、`.git`・`target`・`node_modules`・`.venv` を探さない、追跡されているものには重ねずに警告する
-- [ ] T032 T030・T031 を通す `bin/agent-box` を書く（位置パラメータで組み立てる、`exec` で置き換えない、`trap` で片付ける）
-- [ ] T033 本人の端末で、本物の bwrap を使って `~/.ssh` が見えないこと、`.env` が読めないこと、`cmd.exe` が動かないこと、DNS と HTTPS（CA の証明書）が通ること、`/proc` から囲いの外のプロセスが見えないこと、`.git/hooks` に書けないこと、Ctrl-C がエージェントに届くことを確かめ、`gate.md` に記録する
+- [ ] T032 T030・T031 を通す `bin/agent-box` を書く（位置パラメータで組み立てる、`exec` で置き換えない、`trap` で片付ける）。secret-scan が見る認証のファイルと環境変数の名前の一覧を、`profiles/*.conf` から作って読むだけで mount する（値は入れない）
+- [ ] T033 本人の端末で、本物の bwrap を使って `~/.ssh` が見えないこと、`.env` が読めないこと、`cmd.exe` が動かないこと、DNS と HTTPS（CA の証明書）が通ること、`/proc` から囲いの外のプロセスが見えないこと、`.git/hooks` に書けないこと、Ctrl-C がエージェントに届くこと、囲いの中で見本の値を書いたファイルの commit が `hooks/pre-commit` で止まることを確かめ、`gate.md` に記録する
 
 ## 窓口（broker/token-broker.ts）
 
@@ -40,15 +40,15 @@
 
 ## 認証情報を GitHub に上げないための確かめ（1 段目）
 
-- [ ] T052 [テスト先] bats で、`gitleaks.toml`（既定の規則と、Claude のログイン・Google の OAuth・OpenCode・Woodpecker・Codex の形）と `agent-box-secret-scan`（認証のファイルの値と `grep -F` で比べる）が、見本の値を見つけ、値を出さずにファイルと行だけを出すことを確かめる。あわせて、gitleaks に `--config`・`--redact`・`--ignore-gitleaks-allow`・`-i` を付けていて、リポジトリの `.gitleaks.toml`・`.gitleaksignore`・`gitleaks:allow` が効かないこと、secret-scan の値が引数・環境変数・一時ファイルに出ないこと（`/proc/<pid>/cmdline` と `/proc/<pid>/environ` と `/tmp` を見る）、空の値で何にでも当たらないこと、API キーの環境変数の値も見つけることを確かめる。見本の値は、本物の形に似せた偽物にし、`tests/fixtures/` に置く
-- [ ] T053 T052 を通す `gitleaks.toml`・`inner-bin/agent-box-secret-scan`・囲いの中用の `hk/config.pkl`（dotfiles の設定を読み込み、pre-commit と pre-push に gitleaks と secret-scan を足す）を書く
-- [ ] T054 cc-safety-net の `policy.json`（`strict`、読ませない場所に `~/.config/agent-box` と `~/.config/gh`）と rulebook（`--no-verify`・`-n`・`git -c`・`--config-env`・`unset GIT_CONFIG_COUNT`・`env -u GIT_CONFIG_COUNT`・`gh pr merge`・`gh repo delete`・`gh repo edit --visibility`）を、止める見本と通る見本つきで書き、CI で `rule verify` を流す
+- [ ] T052 [テスト先] bats で、`gitleaks.toml`（既定の規則と、Claude のログイン・Google の OAuth・OpenCode・Woodpecker・Codex の形）と `agent-box-secret-scan`（node の中で、認証のファイルと環境変数の 16 文字以上の値と比べる）が、見本の値を見つけ、値を出さずにファイルと行（ファイルの中の行の番号）だけを出し、終了コード 1 で止めることを確かめる。pre-commit（`git diff --cached -U0`）と pre-push（既存のブランチ、新しいブランチの `--not --remotes`、削除の push を飛ばす）の両方、2 つ以上のファイル、node が落ちたときと一覧が読めないときに通さないこと、改行を含む値で何にでも当たらないことも確かめる。あわせて、gitleaks に `--config`・`--redact`・`--ignore-gitleaks-allow`・`-i` を付けていて、リポジトリの `.gitleaks.toml`・`.gitleaksignore`・`gitleaks:allow` が効かないこと、secret-scan の値が引数・環境変数・一時ファイルに出ないこと（`/proc/<pid>/cmdline` と `/proc/<pid>/environ` と `/tmp` を見る）、空の値で何にでも当たらないこと、API キーの環境変数の値も見つけることを確かめる。見本の値は、本物の形に似せた偽物を bats の `setup` で文字列をつなげて作り、`$BATS_TEST_TMPDIR` に置く（リポジトリには入れない）
+- [ ] T053 T052 を通す `gitleaks.toml`・`inner-bin/agent-box-secret-scan`（node のスクリプト）・`hooks/pre-commit` と `hooks/pre-push`（gitleaks と secret-scan を先に流し、通れば `hk run` を呼ぶ）・`share/empty/` を書く
+- [ ] T054 cc-safety-net の `policy.json`（`strict`、読ませない場所に `~/.config/agent-box` と `~/.config/gh`）と rulebook（`--no-verify`・`-n`・`git -c`・`--config-env`・`unset GIT_CONFIG_COUNT`・`env -u GIT_CONFIG_COUNT`・`gh pr merge`・`gh repo delete`・`gh repo edit --visibility`）を、止める見本と通る見本つきで書き、CI で `rule verify` を流す。あわせて、Claude の `managed-settings.json`（cc-safety-net と check-file のフックを固定し、プロジェクトの設定から外せないようにする）を書く
 - [ ] T055 `agent-box check` に、cc-safety-net が各エージェントに組み込まれているかの確かめを足す
 - [ ] T056 README に、エージェントの認証が漏れたときの取り消し方（Claude のログアウトとセッションの取り消し、API キーの作り直し、Codex のログアウト）を書く
 
 ## 移す（1つごとに、記録用の包みで実際の動きを記録してから受け入れる）
 
-- [ ] T060 Claude Code を移す。組み込みの囲いを切り、T3 の Binary path を設定する。受け入れを `gate.md` に記録する
+- [ ] T060 Claude Code を移す。組み込みの囲いを切り、T3 の Binary path を設定する。agent-box のリポジトリで、リポジトリ固有の hk の段（check の側）が囲いの中で通ることも確かめる。受け入れを `gate.md` に記録する
 - [ ] T061 Pi を移す。自動更新を切る方法と、本体の置き場を読むだけにしたときの動きを確かめる
 - [ ] T062 Antigravity を移す
 - [ ] T063 Codex を入れて移す（公式の入れ方を確かめる。組み込みの囲いを切る。`config.toml` の扱いを確かめる）

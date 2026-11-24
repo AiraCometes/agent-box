@@ -25,7 +25,7 @@ hosts.yml
 .npmrc
 .pypirc
 .pgpass
-.docker/config.json
+**/.docker/config.json
 *.tfstate
 *.tfstate.*
 # 環境変数のファイル（見本は残す）
@@ -64,13 +64,10 @@ hosts.yml
 /.zprofile
 /.zshrc
 
-# 上の形に当たっても、リポジトリのコードとテストの見本は残す（見本は偽物の値だけにする）
-!/bin/**
-!/inner-bin/**
-!/broker/**
-!/hooks/**
-!/hk/**
-!/cc-safety-net/**
-!/tests/**
-!/systemd/**
-!/specs/**
+# 秘密の形に当たってしまうコードのファイルだけを、ファイルごとに残す（フォルダーを丸ごと残さない）。
+# テストの見本の値はリポジトリに入れず、テストの中で作る（spec.md の「秘密の置き場」）
+!/broker/token-broker.ts
+!/broker/token-broker.test.ts
+!/inner-bin/git-credential-agent-box
+!/tests/git-credential-agent-box.bats
+!/tests/token-broker.bats

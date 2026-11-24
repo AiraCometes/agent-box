@@ -77,6 +77,17 @@
 | V10 | Claude は `/etc/claude-code/managed-settings.json` でフックを固定する。ほかのエージェントは移すときに確かめる |
 | V11 | `.envrc`・`.npmrc`・`.pypirc` も塞ぐ。`.env` がシンボリックリンクならリンクの先にも重ねる |
 
+## 決めたこと（Sonnet 5.5 の2回目のレビューで足したもの、W1〜W6）
+
+| # | 決めたこと |
+|---|---|
+| W1 | secret-scan は node の中で完結させる。値は 16 文字以上。pre-commit は `git diff --cached -U0`、pre-push は `<remote>..<local>`、新しいブランチは `<local> --not --remotes`、削除の push は飛ばす。見つかれば終了コード 1、落ちたときも通さない |
+| W2 | `.git/config` の写しは `~/.local/state/agent-box/<hash>/` に置き、起動のときにも残りで戻す。同時のセッションは `flock` の中で、PID と起動時刻が合う生きているものだけを数え、最後のセッションが戻す。submodule と worktree の `hooks`・`config` も同じに扱う |
+| W3 | gitleaks と secret-scan は、読むだけの `hooks/pre-commit`・`hooks/pre-push` が hk より先に直接流す（リポジトリの `hk.pkl` で上書きできないように） |
+| W4 | テストの見本の値は、テストの中で作ってリポジトリに入れない。`.gitignore` は、秘密の形に当たるコードのファイルだけをファイルごとに残す |
+| W5 | `.git/config` に残してよいのは `branch.*` と、新しいリモートの `url`・`fetch`（url は `https://`・`git@github.com:`・`ssh://git@github.com/` だけ）。消えたリモートを指す `branch.<x>.remote` は戻す。submodule は囲いの中では続けて使えないものとして受け入れる |
+| W6 | 共通の環境変数に `HK_CHECK=1` と `HK_STASH_UNTRACKED=0` を入れる。T060 で、agent-box のリポジトリ固有の hk の段が囲いの中で通ることを確かめる |
+
 ## G6 レビューのときに確かめたこと（2026-11-24）
 
 - `/etc/resolv.conf` は `/mnt/wsl/resolv.conf` へのシンボリックリンクで、リンクの先のファイルはある
