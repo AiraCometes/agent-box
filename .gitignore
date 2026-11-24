@@ -1,0 +1,72 @@
+# 秘密（spec.md の「秘密の置き場」）。認証情報はリポジトリに置かない前提で、これはそれが破れたときの受け止め。
+# 鍵と証明書
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.ppk
+*.jks
+*.keystore
+*.kdbx
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+# トークンと認証情報
+*token*
+*.token
+*credential*
+auth.json
+.credentials.json
+hosts.yml
+.netrc
+.git-credentials
+.npmrc
+.pypirc
+.pgpass
+**/.docker/config.json
+*.tfstate
+*.tfstate.*
+# 環境変数のファイル（見本は残す）
+.env
+.env.*
+.envrc
+!.env.example
+!.env.sample
+!.env.template
+# 本物の窓口とエージェントの設定（見本は *.conf.example として置く）
+/broker.conf
+/profiles/*.conf
+!/profiles/*.conf.example
+
+# 動かしたときにできるもの
+*.sock
+*.log
+/tmp/
+
+# エディターと OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# 囲い（Claude Code・srt）がリポジトリの直下に作る印
+/.claude/
+/.bash_profile
+/.bashrc
+/.gitconfig
+/.gitmodules
+/.mcp.json
+/.profile
+/.ripgreprc
+/.zprofile
+/.zshrc
+
+# 秘密の形に当たってしまうコードのファイルだけを、ファイルごとに残す（フォルダーを丸ごと残さない）。
+# テストの見本の値はリポジトリに入れず、テストの中で作る（spec.md の「秘密の置き場」）
+!/broker/token-broker.ts
+!/broker/token-broker.test.ts
+!/inner-bin/git-credential-agent-box
+!/tests/git-credential-agent-box.bats
