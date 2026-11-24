@@ -70,7 +70,7 @@
 | V3 | `core.hooksPath` を agent-box の読むだけのフックのフォルダーに向け、hk を流す。リポジトリ自身の `.git/hooks` のフックは囲いの中では動かない |
 | V4 | secret-scan が見る認証のファイルと変数の名前の一覧を、起動スクリプトが作って読むだけで mount する（値は入れない） |
 | V5 | `profiles/*.conf` には環境変数の名前だけを書き、値は起動したときの環境から引き継ぐ |
-| V6 | secret-scan の値は引数・環境変数・一時ファイルに出さず、パイプからファイル記述子で渡す。gitleaks には `--config`・`--redact`・`--ignore-gitleaks-allow`・`-i` を必ず付ける |
+| V6 | secret-scan の値は引数・環境変数・一時ファイルに出さない（パイプからファイル記述子で渡す形は、W1 で node の中で完結させる形に置き換えた）。gitleaks には `--config`・`--redact`・`--ignore-gitleaks-allow`・`-i` を必ず付ける |
 | V7 | 書けるのは親のフォルダーごと。`~/.claude.json` は `CLAUDE_CONFIG_DIR` で移せるかを確かめ、だめなら写して戻す |
 | V8 | `--unshare-pid` と新しい `/proc`、`--die-with-parent` を付ける。`--new-session` は付けない |
 | V9 | `MISE_STATE_DIR`・`MISE_CACHE_DIR` を囲い専用の場所に、`MISE_TRUSTED_CONFIG_PATHS` にプロジェクトを入れる |
@@ -87,6 +87,25 @@
 | W4 | テストの見本の値は、テストの中で作ってリポジトリに入れない。`.gitignore` は、秘密の形に当たるコードのファイルだけをファイルごとに残す |
 | W5 | `.git/config` に残してよいのは `branch.*` と、新しいリモートの `url`・`fetch`（url は `https://`・`git@github.com:`・`ssh://git@github.com/` だけ）。消えたリモートを指す `branch.<x>.remote` は戻す。submodule は囲いの中では続けて使えないものとして受け入れる |
 | W6 | 共通の環境変数に `HK_CHECK=1` と `HK_STASH_UNTRACKED=0` を入れる。T060 で、agent-box のリポジトリ固有の hk の段が囲いの中で通ることを確かめる |
+
+## 決めたこと（Sonnet 5.5 の3回目のレビューで足したもの、X1〜X6）
+
+| # | 決めたこと |
+|---|---|
+| X1 | 差分を読む git に `--no-ext-diff --no-textconv --no-color --no-renames` と、`-c diff.external= -c diff.noprefix=false -c diff.mnemonicPrefix=false -c color.ui=false` を付ける。gitleaks には `GIT_EXTERNAL_DIFF=` と、同じ設定を `GIT_CONFIG_*` の後ろに足して渡す（効くかは T052 で確かめる） |
+| X2 | 新しいブランチの push は、起動したときの写しにある `refs/remotes/*` の SHA だけを除く。写しが 0 件なら `--not` を付けない。リモートの SHA がローカルに無いときも同じ扱い |
+| X3 | `flock` の中で、生きているセッションが 0 のときだけ戻してから写しを取る。1 つ以上なら写しも戻しもしない。最後のセッションが戻す。写しの場所は `--git-common-dir` の実パスから決める |
+| X4 | node・gitleaks・hk は agent-box の `mise.toml` で版を固定し、起動スクリプトがフルパスを決めて渡す。`PATH` は `inner-bin` → mise の shim → `/usr/bin` |
+| X5 | gitleaks は pre-commit で `git --staged`、pre-push で `git --log-opts`。secret-scan は `spawn` で行ごとに読み、`-m` でマージの内容も見る。pre-push の標準入力は変数に取っておき、それぞれに渡す |
+| X6 | `.git/config` は、囲いの外の node のスクリプトが、`--list -z` で読み、残してよいものを `--add` で足したファイルに付け替える。警告にはキーの名前だけを出す |
+
+## G7 3回目のレビューで、レビューの側が一時リポジトリで確かめたこと（2026-11-24）
+
+- `diff.external` を置くと `git diff --cached` はそのプログラムを動かし、秘密の行が出なくなった。`.gitattributes` の `diff=x` と `diff.x.textconv` でも同じ。`--no-ext-diff --no-textconv` を付けると見つかった
+- `git update-ref refs/remotes/fake/x HEAD` のあと、`git log -p -U0 HEAD --not --remotes` の出力は 0 行になった
+- パイプを `grep -f /dev/fd/3` で2回読むと、GNU grep 3.12 では2回目に何も出ず、ugrep 7.8.4 では全行に当たった
+- `branch.main.remote` に `ext::…` を入れて fetch すると、git は値を URL として扱い、`transport 'ext' not allowed` で止まった
+- hk 2.13.0 に `HK_CHECK` と `HK_STASH_UNTRACKED` がある
 
 ## G6 レビューのときに確かめたこと（2026-11-24）
 

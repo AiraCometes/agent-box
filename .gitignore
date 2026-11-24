@@ -70,4 +70,3 @@ hosts.yml
 !/broker/token-broker.test.ts
 !/inner-bin/git-credential-agent-box
 !/tests/git-credential-agent-box.bats
-!/tests/token-broker.bats
